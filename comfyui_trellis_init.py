@@ -4,14 +4,29 @@ ComfyUI-Trellis
 
 This extension provides integration between ComfyUI and the Trellis 3D model generation system.
 It allows using ComfyUI-generated images as input for Trellis processing to create 3D models.
+
+Author: Your Name
+Version: 0.1.0
 """
 
 import os
 import importlib.util
 import sys
-import logging
+
+# Import node definitions
+from .comfyui_trellis_node import NODE_CLASS_MAPPINGS as BASIC_NODE_CLASS_MAPPINGS
+from .comfyui_trellis_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NODE_DISPLAY_NAME_MAPPINGS
+
+# Import viewer node definitions
+from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_CLASS_MAPPINGS
+from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NODE_DISPLAY_NAME_MAPPINGS
+
+# Import viewer node definitions
+from .trellis_advanced_nodes import NODE_CLASS_MAPPINGS as VIEWER_NODE_CLASS_MAPPINGS
+from .trellis_advanced_nodes import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NODE_DISPLAY_NAME_MAPPINGS
 
 # Create main logger
+import logging
 logger = logging.getLogger('ComfyUI-Trellis')
 logger.setLevel(logging.INFO)
 
@@ -29,20 +44,21 @@ if missing_packages:
     logger.warning("Please install them using: pip install " + " ".join(missing_packages))
 
 # Ensure directories exist
-dirs = ['trellis_downloads', 'trellis_files', 'trellis_files/viewers', 'trellis_files/players']
+dirs = ['trellis_downloads', 'trellis_api_downloads', 'trellis_sessions', 
+        'trellis_files', 'trellis_files/temp', 'trellis_files/models', 
+        'trellis_files/viewers', 'trellis_files/players', 'trellis_files/videos', 'trellis_metadata']
 
 for dir_path in dirs:
     os.makedirs(dir_path, exist_ok=True)
 
-# Import directly from the node file (simplifies imports)
-try:
-    from .comfyui_trellis_node import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
-    logger.info("Successfully imported Trellis nodes")
-except ImportError as e:
-    logger.error(f"Error importing Trellis nodes: {e}")
-    # Provide empty mappings as fallback
-    NODE_CLASS_MAPPINGS = {}
-    NODE_DISPLAY_NAME_MAPPINGS = {}
+# Create combined NODE_CLASS_MAPPINGS
+NODE_CLASS_MAPPINGS = {**BASIC_NODE_CLASS_MAPPINGS, **VIEWER_NODE_CLASS_MAPPINGS}
+NODE_DISPLAY_NAME_MAPPINGS = {**BASIC_NODE_DISPLAY_NAME_MAPPINGS, **VIEWER_NODE_DISPLAY_NAME_MAPPINGS}
+
+# Print startup message
+logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
+for node_name in NODE_CLASS_MAPPINGS.keys():
+    logger.info(f"  - {NODE_DISPLAY_NAME_MAPPINGS.get(node_name, node_name)}")
 
 # Add a note about the package to ComfyUI terminal
 print("=" * 80)
