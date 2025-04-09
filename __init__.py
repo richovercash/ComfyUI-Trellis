@@ -9,6 +9,7 @@ import os
 import sys
 import logging
 import importlib.util
+from .comfyui_trellis_node import NODE_CLASS_MAPPINGS, NODE_DISPLAY_NAME_MAPPINGS
 
 # Setup logging
 logging.basicConfig(level=logging.INFO)

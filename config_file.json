@@ -1,6 +1,6 @@
 {
     "server": {
-        "websocket_url": "ws://18.199.134.45:46173",
+        "websocket_url": "ws://35.164.116.189:38183",
         "rest_api_url": "http://localhost:8000",
         "timeout_seconds": 120,
         "reconnect_attempts": 5,
