@@ -34,6 +34,9 @@ class TrellisModelViewerNode:
                      display_height=600, auto_rotate="enabled", camera_distance=2.0):
         """Create an HTML viewer for the 3D model"""
         try:
+            # Make sure the path is absolute
+            glb_path = os.path.abspath(glb_path)
+
             if not glb_path or not os.path.exists(glb_path):
                 logger.error(f"GLB file not found: {glb_path}")
                 return self.create_error_html("Model file not found or invalid path"), ""
@@ -76,6 +79,13 @@ class TrellisModelViewerNode:
     
     def generate_three_js_viewer(self, model_path, background_color, width, height, 
                                auto_rotate, camera_distance):
+        
+        #     # Convert to file:// URL for local access
+        # model_url_path = f"file://{os.path.abspath(model_path).replace('\\', '/')}"
+        #         # Convert to absolute URL path (if running on a web server)
+        # model_url_path = model_path.replace('\\', '/')
+        
+
         """Generate HTML content for a Three.js viewer"""
         
         # Handle gradient background
@@ -86,7 +96,10 @@ class TrellisModelViewerNode:
             bg_style = f"background-color: {background_color};"
             bg_color = background_color
         
+
+
         html = f"""<!DOCTYPE html>
+
 <html lang="en">
 <head>
     <meta charset="UTF-8">

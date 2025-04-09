@@ -1,9 +1,28 @@
 import json
+import aiohttp
 import os
 import base64
 import websockets
 import asyncio
 from PIL import Image
+import io
+import numpy as np
+import tempfile
+import logging
+
+# Setup logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger('TrellisNode')
+
+# Main Trellis Client for WebSocket communication
+import json
+import aiohttp
+import os
+import base64
+import websockets
+import asyncio
+from PIL import Image
+import io
 import numpy as np
 import tempfile
 import logging
@@ -28,21 +47,16 @@ class TrellisClientComfy:
             return True
 
         try:
-            # Get the proper URL format
-            if self.server_url.endswith('/ws'):
-                url = self.server_url
-            else:
+            # Ensure URL ends with /ws
+            if not self.server_url.endswith('/ws'):
                 url = f"{self.server_url.rstrip('/')}/ws"
+            else:
+                url = self.server_url
                 
             logger.info(f"Connecting to {url}")
             
-            # Use simple parameters based on the successful test
-            self.websocket = await websockets.connect(
-                url,
-                ping_interval=30,
-                ping_timeout=30,
-                max_size=None
-            )
+            # Simplified connection with fewer parameters
+            self.websocket = await websockets.connect(url)
             
             self.connected = True
             logger.info("✓ Successfully connected to server")
@@ -50,7 +64,6 @@ class TrellisClientComfy:
                 
         except Exception as e:
             logger.error(f"Connection failed: {e}")
-            logger.error(f"Connection error type: {type(e).__name__}")
             self.connected = False
             self.websocket = None
             return False
@@ -93,7 +106,7 @@ class TrellisClientComfy:
             if params:
                 default_params.update(params)
 
-            # Prepare message - match format from successful test
+            # Prepare message
             message = {
                 'command': 'process_single',
                 'image': encoded_image,
@@ -107,7 +120,6 @@ class TrellisClientComfy:
             # Get initial response
             initial_response = await self.websocket.recv()
             initial_data = json.loads(initial_response)
-            logger.info(f"Initial response: {json.dumps(initial_data)}")
 
             if initial_data.get('status') != 'accepted':
                 raise ValueError(f"Request not accepted: {initial_data.get('message')}")
@@ -119,7 +131,6 @@ class TrellisClientComfy:
             while True:
                 result = await self.websocket.recv()
                 result_data = json.loads(result)
-                logger.info(f"Received update: {json.dumps(result_data)}")
                 
                 if result_data.get('status') == 'success':
                     return {
@@ -185,8 +196,8 @@ class TrellisClientComfy:
             return None
 
 
-# ComfyUI Node Definition
-class TrellisProcessWebSocket:
+# ComfyUI Node Definitions
+class TrellisProcessNode:
     """Node that processes an image through Trellis WebSocket server"""
     
     @classmethod
@@ -212,75 +223,76 @@ class TrellisProcessWebSocket:
 
     async def _process_async(self, image, server_url, seed, sparse_steps, sparse_cfg_strength, 
                            slat_steps, slat_cfg_strength, simplify, texture_size):
-        # Convert ComfyUI image format to bytes with proper tensor handling
-        # Check if it's a PyTorch tensor and convert properly
-        if hasattr(image[0], 'cpu'):
-            # Move tensor to CPU and convert to numpy
-            image_np = image[0].cpu().numpy()
-        else:
-            # Already a numpy array
-            image_np = image[0]
-            
-        # Convert to uint8 for PIL
-        image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
-        
-        # Save to a temporary file
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
-        image_pil.save(temp_file.name)
-        temp_file.close()
-        
-        # Read the file as bytes
-        with open(temp_file.name, 'rb') as f:
-            image_bytes = f.read()
-        
-        # Clean up the temporary file
-        os.unlink(temp_file.name)
-        
-        # Setup parameters
-        params = {
-            'seed': seed,
-            'sparse_steps': sparse_steps,
-            'sparse_cfg_strength': sparse_cfg_strength,
-            'slat_steps': slat_steps,
-            'slat_cfg_strength': slat_cfg_strength,
-            'simplify': simplify,
-            'texture_size': texture_size
-        }
-        
-        # Validate texture_size to ensure it's one of the allowed values
-        valid_texture_sizes = [512, 1024, 1536, 2048]
-        if params['texture_size'] not in valid_texture_sizes:
-            # Round to nearest valid size
-            params['texture_size'] = min(valid_texture_sizes, key=lambda x: abs(x - params['texture_size']))
-            logger.warning(f"Adjusted texture_size to {params['texture_size']}")
-            
-        # Process image
-        client = TrellisClientComfy(server_url)
+        # Convert ComfyUI image format to bytes
+        # Handle PyTorch tensor if present
         try:
-            if not await client.connect():
-                logger.error("Failed to connect to Trellis server")
-                return None, None
+            if hasattr(image[0], 'cpu'):
+                # This is a PyTorch tensor, convert to numpy
+                image_np = image[0].cpu().numpy()
+            else:
+                # Already a numpy array
+                image_np = image[0]
                 
-            logger.info("Successfully connected to Trellis server")
-            result = await client.process_image(image_bytes, params)
+            # Convert to PIL image
+            image_pil = Image.fromarray((image_np * 255).astype(np.uint8))
             
-            if not result or result.get('status') != 'success':
-                logger.error("Processing failed")
-                return None, None
+            # Save to a temporary file
+            temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.png')
+            image_pil.save(temp_file.name)
+            temp_file.close()
+            
+            # Read the file as bytes
+            with open(temp_file.name, 'rb') as f:
+                image_bytes = f.read()
+            
+            # Clean up the temporary file
+            os.unlink(temp_file.name)
+            
+            # Setup parameters
+            params = {
+                'seed': seed,
+                'sparse_steps': sparse_steps,
+                'sparse_cfg_strength': sparse_cfg_strength,
+                'slat_steps': slat_steps,
+                'slat_cfg_strength': slat_cfg_strength,
+                'simplify': simplify,
+                'texture_size': texture_size
+            }
+            
+            # Validate texture_size to ensure it's one of the allowed values
+            valid_texture_sizes = [512, 1024, 1536, 2048]
+            if params['texture_size'] not in valid_texture_sizes:
+                # Round to nearest valid size
+                params['texture_size'] = min(valid_texture_sizes, key=lambda x: abs(x - params['texture_size']))
+                logger.warning(f"Adjusted texture_size to {params['texture_size']}")
                 
-            # Download files
-            glb_path = await client.download_file(result['session_id'], result['task_id'], 'glb')
-            video_path = await client.download_file(result['session_id'], result['task_id'], 'video')
+            # Process image
+            client = TrellisClientComfy(server_url)
             
-            # Disconnect when done
-            await client.disconnect()
-            
-            return glb_path, video_path
-        
-        except Exception as e:
-            logger.error(f"Error processing image: {e}")
-            if hasattr(client, 'connected') and client.connected:
+            try:
+                result = await client.process_image(image_bytes, params)
+                
+                if not result or result.get('status') != 'success':
+                    logger.error("Processing failed")
+                    return None, None
+                    
+                # Download files
+                glb_path = await client.download_file(result['session_id'], result['task_id'], 'glb')
+                video_path = await client.download_file(result['session_id'], result['task_id'], 'video')
+                
+                # Disconnect when done
                 await client.disconnect()
+                
+                return glb_path, video_path
+            
+            except Exception as e:
+                logger.error(f"Error processing image: {e}")
+                if hasattr(client, 'connected') and client.connected:
+                    await client.disconnect()
+                return None, None
+                
+        except Exception as e:
+            logger.error(f"Error preparing image: {e}")
             return None, None
 
     def process(self, image, server_url, seed, sparse_steps, sparse_cfg_strength, 
@@ -293,14 +305,15 @@ class TrellisProcessWebSocket:
                 self._process_async(image, server_url, seed, sparse_steps, sparse_cfg_strength, 
                                   slat_steps, slat_cfg_strength, simplify, texture_size)
             )
+            logger.info(f"Downloaded GLB file to: {glb_path}")
             return (glb_path or "", video_path or "")
         finally:
             loop.close()
 
 
-# Node Definitions - CRITICAL: Use the exact class name in the key
+# Node Definitions
 NODE_CLASS_MAPPINGS = {
-    "TrellisProcessWebSocket": TrellisProcessWebSocket
+    "TrellisProcessWebSocket": TrellisProcessNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {

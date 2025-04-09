@@ -17,9 +17,24 @@ import sys
 from .comfyui_trellis_node import NODE_CLASS_MAPPINGS as BASIC_NODE_CLASS_MAPPINGS
 from .comfyui_trellis_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NODE_DISPLAY_NAME_MAPPINGS
 
-# Import viewer node definitions
-from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_CLASS_MAPPINGS
-from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NODE_DISPLAY_NAME_MAPPINGS
+# # Import viewer node definitions
+# from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_CLASS_MAPPINGS
+# from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NODE_DISPLAY_NAME_MAPPINGS
+
+
+# Add these lines to your __init__.py
+try:
+    from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
+    from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
+    # Add viewer nodes to the mappings
+    NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
+    print("Successfully loaded Trellis viewer nodes")
+except Exception as e:
+    print(f"Error loading Trellis viewer nodes: {e}")
+
+
+
 
 # Import viewer node definitions
 from .trellis_advanced_nodes import NODE_CLASS_MAPPINGS as VIEWER_NODE_CLASS_MAPPINGS
@@ -68,3 +83,24 @@ print(" Available nodes:")
 for node_name, display_name in NODE_DISPLAY_NAME_MAPPINGS.items():
     print(f" - {display_name}")
 print("=" * 80)
+
+
+
+# Add to __init__.py
+import folder_paths
+from comfy.cli_args import args
+import os
+
+# Register HTML output type if needed
+RETURN_TYPES = {
+    "HTML": {"html": "HTML"}
+}
+
+# Register this if ComfyUI has a function for registering custom output types
+# This is hypothetical - the exact method depends on ComfyUI's API
+try:
+    import comfy.utils
+    comfy.utils.register_return_types(RETURN_TYPES)
+except:
+    print("Warning: Could not register HTML return type")
+
