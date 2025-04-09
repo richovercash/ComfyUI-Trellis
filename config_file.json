@@ -1,0 +1,51 @@
+{
+    "server": {
+        "websocket_url": "ws://18.199.134.45:46173",
+        "rest_api_url": "http://localhost:8000",
+        "timeout_seconds": 120,
+        "reconnect_attempts": 5,
+        "reconnect_delay_seconds": 3
+    },
+    "processing": {
+        "default_parameters": {
+            "seed": 1,
+            "sparse_steps": 12,
+            "sparse_cfg_strength": 7.5,
+            "slat_steps": 12,
+            "slat_cfg_strength": 3,
+            "simplify": 0.95,
+            "texture_size": 1024
+        },
+        "parameter_presets": {
+            "fast": {
+                "sparse_steps": 8,
+                "slat_steps": 8,
+                "texture_size": 512
+            },
+            "quality": {
+                "sparse_steps": 20,
+                "slat_steps": 16,
+                "texture_size": 2048
+            },
+            "balanced": {
+                "sparse_steps": 12,
+                "slat_steps": 12,
+                "texture_size": 1024
+            }
+        }
+    },
+    "storage": {
+        "download_dir": "trellis_downloads",
+        "api_download_dir": "trellis_api_downloads",
+        "session_dir": "trellis_sessions",
+        "metadata_dir": "trellis_metadata",
+        "cleanup_temp_files_hours": 24,
+        "max_cache_size_mb": 1024
+    },
+    "logging": {
+        "level": "INFO",
+        "file": "trellis_comfy.log",
+        "max_size_mb": 10,
+        "backup_count": 3
+    }
+}
