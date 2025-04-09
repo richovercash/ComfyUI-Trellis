@@ -1,11 +1,9 @@
 import json
-import aiohttp
 import os
 import base64
 import websockets
 import asyncio
 from PIL import Image
-import io
 import numpy as np
 import tempfile
 import logging
@@ -30,7 +28,7 @@ class TrellisClientComfy:
             return True
 
         try:
-            # Fix for URL formatting - don't add /ws if it's already there
+            # Get the proper URL format
             if self.server_url.endswith('/ws'):
                 url = self.server_url
             else:
@@ -38,12 +36,11 @@ class TrellisClientComfy:
                 
             logger.info(f"Connecting to {url}")
             
-            # Simpler connection parameters compatible with older websockets versions
+            # Use simple parameters based on the successful test
             self.websocket = await websockets.connect(
                 url,
-                ping_interval=20,
-                ping_timeout=20,
-                
+                ping_interval=30,
+                ping_timeout=30,
                 max_size=None
             )
             
@@ -96,7 +93,7 @@ class TrellisClientComfy:
             if params:
                 default_params.update(params)
 
-            # Prepare message
+            # Prepare message - match format from successful test
             message = {
                 'command': 'process_single',
                 'image': encoded_image,
@@ -110,6 +107,7 @@ class TrellisClientComfy:
             # Get initial response
             initial_response = await self.websocket.recv()
             initial_data = json.loads(initial_response)
+            logger.info(f"Initial response: {json.dumps(initial_data)}")
 
             if initial_data.get('status') != 'accepted':
                 raise ValueError(f"Request not accepted: {initial_data.get('message')}")
@@ -121,6 +119,7 @@ class TrellisClientComfy:
             while True:
                 result = await self.websocket.recv()
                 result_data = json.loads(result)
+                logger.info(f"Received update: {json.dumps(result_data)}")
                 
                 if result_data.get('status') == 'success':
                     return {
@@ -186,8 +185,8 @@ class TrellisClientComfy:
             return None
 
 
-# ComfyUI Node Definitions
-class TrellisProcessNode:
+# ComfyUI Node Definition
+class TrellisProcessWebSocket:
     """Node that processes an image through Trellis WebSocket server"""
     
     @classmethod
@@ -195,7 +194,7 @@ class TrellisProcessNode:
         return {
             "required": {
                 "image": ("IMAGE",),
-                "server_url": ("STRING", {"default": "ws://18.199.134.45:46173"}),
+                "server_url": ("STRING", {"default": "ws://35.164.116.189:38183"}),
                 "seed": ("INT", {"default": 1, "min": 1, "max": 2147483647}),
                 "sparse_steps": ("INT", {"default": 12, "min": 1, "max": 50}),
                 "sparse_cfg_strength": ("FLOAT", {"default": 7.5, "min": 0.0, "max": 10.0, "step": 0.1}),
@@ -299,9 +298,9 @@ class TrellisProcessNode:
             loop.close()
 
 
-# Node Definitions
+# Node Definitions - CRITICAL: Use the exact class name in the key
 NODE_CLASS_MAPPINGS = {
-    "TrellisProcessWebSocket": TrellisProcessNode
+    "TrellisProcessWebSocket": TrellisProcessWebSocket
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
