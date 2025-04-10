@@ -46,8 +46,17 @@ try:
 except Exception as e:
     print(f"Error loading simplified viewer: {e}")
 
-    
-       
+
+# Import node definitions one by one
+try:
+    from .trellis_inline_node import NODE_CLASS_MAPPINGS as BASIC_NODE_MAPPINGS
+    from .trellis_inline_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(BASIC_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(BASIC_NAME_MAPPINGS)
+    logger.info("Loaded basic Trellis inline nodes")
+except Exception as e:
+    logger.error(f"Error loading basic Trellis inline nodes: {e}")
+
 
 # Try to import advanced nodes if they exist
 try:
@@ -68,6 +77,18 @@ try:
     logger.info("Successfully loaded Trellis viewer nodes")
 except Exception as e:
     logger.error(f"Error loading Trellis viewer nodes: {e}")
+
+
+
+# Try to import viewer nodes if they exist
+try:
+    from .trellis_preview_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
+    from .trellis_preview_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
+    logger.info("Successfully loaded Trellis preview nodes")
+except Exception as e:
+    logger.error(f"Error loading Trellis preview nodes: {e}")
 
 # Print startup message
 logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
