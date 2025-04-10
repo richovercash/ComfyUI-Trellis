@@ -90,6 +90,10 @@ try:
 except Exception as e:
     logger.error(f"Error loading Trellis preview nodes: {e}")
 
+
+
+
+
 # Print startup message
 logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
 for node_name in NODE_CLASS_MAPPINGS.keys():
@@ -123,4 +127,22 @@ try:
     comfy.utils.register_return_types(RETURN_TYPES)
 except:
     print("Warning: Could not register HTML return type")
+
+
+    # Add to your existing __init__.py
+
+# Import server components
+def init_webserver():
+    try:
+        from server import PromptServer
+        import webserver.server
+        print("Trellis Web Server initialized")
+    except Exception as e:
+        print(f"Error initializing Trellis Web Server: {e}")
+
+# Define web directory
+WEB_DIRECTORY = os.path.join(os.path.dirname(os.path.realpath(__file__)), "web")
+
+# Initialize web server
+init_webserver()
 

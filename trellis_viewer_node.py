@@ -470,6 +470,71 @@ class TrellisVideoPlayerNode:
 """
 
 
+
+
+class TrellisViewNode:
+    """Node that displays 3D models directly in ComfyUI"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "file_path": ("STRING", {"default": ""}),
+                "file_type": (["auto", "model", "video"], {"default": "auto"}),
+            }
+        }
+    
+    RETURN_TYPES = ()
+    FUNCTION = "preview_file"
+    CATEGORY = "Trellis"
+    OUTPUT_NODE = True
+    
+    def preview_file(self, file_path, file_type="auto"):
+        if not file_path or not os.path.exists(file_path):
+            return {"ui": {"status": "waiting"}}
+        
+        # Auto-detect file type if needed
+        if file_type == "auto":
+            ext = os.path.splitext(file_path)[1].lower()
+            if ext in ['.glb', '.gltf']:
+                file_type = "model"
+            elif ext in ['.mp4', '.webm', '.mov']:
+                file_type = "video"
+            else:
+                return {"ui": {"status": "error", "message": f"Unsupported file type: {ext}"}}
+        
+        # Generate a unique file ID based on file path
+        import hashlib
+        file_hash = hashlib.md5(os.path.abspath(file_path).encode()).hexdigest()
+        file_id = f"preview_{file_hash}"
+        
+        # Register file for serving
+        from server import PromptServer
+        if not hasattr(PromptServer.instance, 'trellis_files'):
+            PromptServer.instance.trellis_files = {}
+        
+        PromptServer.instance.trellis_files[file_id] = {
+            "path": os.path.abspath(file_path),
+            "type": file_type,
+            "mtime": os.path.getmtime(file_path)
+        }
+        
+        # Return data for UI
+        return {
+            "ui": {
+                "status": "ready",
+                "preview": {
+                    "file_id": file_id,
+                    "file_type": file_type
+                }
+            }
+        }
+    
+
+
+    
+
+
 # Add these new node classes to the mappings
 NODE_CLASS_MAPPINGS = {
     "TrellisModelViewerNode": TrellisModelViewerNode,
