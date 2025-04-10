@@ -140,6 +140,15 @@ try:
 except Exception as e:
     logger.error(f"Failed to load Trellis web server: {e}")
 
+import server
+
+# Register our web routes
+base_dir = os.path.dirname(os.path.realpath(__file__))
+server.PromptServer.instance.app.router.add_static(
+    "/trellis/static/",
+    path=os.path.join(base_dir, "web"),
+    name="trellis_static"
+)
 # # Print startup message
 # logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
 # for node_name in NODE_CLASS_MAPPINGS.keys():

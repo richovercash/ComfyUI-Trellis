@@ -24,8 +24,8 @@ class TrellisModelViewerNode:
             }
         }
     
-    RETURN_TYPES = ("HTML", "STRING",)
-    RETURN_NAMES = ("viewer_html", "viewer_path",)
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("glb_path", "viewer_url", "viewer_path")
     FUNCTION = "create_viewer"
     CATEGORY = "Trellis"
     OUTPUT_NODE = True
@@ -39,7 +39,12 @@ class TrellisModelViewerNode:
 
             if not glb_path or not os.path.exists(glb_path):
                 logger.error(f"GLB file not found: {glb_path}")
-                return self.create_error_html("Model file not found or invalid path"), ""
+                return glb_path, "", ""
+            
+            # Extract model ID from path
+            filename = os.path.basename(glb_path)
+            model_id = filename.split("_")[0]
+            viewer_url = f"/trellis/view-model/{model_id}"
             
             # Create a unique viewer filename
             viewer_dir = os.path.join("trellis_files", "viewers")
@@ -48,34 +53,16 @@ class TrellisModelViewerNode:
             viewer_filename = f"view_{os.path.basename(glb_path).replace('.glb', '')}.html"
             viewer_path = os.path.join(viewer_dir, viewer_filename)
             
-            # Check if we need to encode the model data or use a file path
-            # For this example, we'll use a file path approach
-            relative_model_path = os.path.relpath(glb_path, os.path.dirname(viewer_path))
+            # For debugging
+            logger.info(f"GLB Path: {glb_path}")
+            logger.info(f"Model ID: {model_id}")
+            logger.info(f"Viewer URL: {viewer_url}")
             
-            # Configure viewer settings
-            auto_rotate_value = "true" if auto_rotate == "enabled" else "false"
-            
-            # Create the HTML content
-            html_content = self.generate_three_js_viewer(
-                model_path=relative_model_path,
-                background_color=background_color,
-                width=display_width,
-                height=display_height,
-                auto_rotate=auto_rotate_value,
-                camera_distance=camera_distance
-            )
-            
-            # Write the HTML file
-            with open(viewer_path, 'w') as f:
-                f.write(html_content)
-            
-            logger.info(f"Created 3D viewer at: {viewer_path}")
-            
-            return html_content, viewer_path
+            return glb_path, viewer_url, viewer_path
             
         except Exception as e:
             logger.error(f"Error creating viewer: {e}")
-            return self.create_error_html(str(e)), ""
+            return glb_path, "", ""
     
     # Add to TrellisVideoPlayerNode class
     def ui(self, glb_path, viewer_html, viewer_path):
@@ -385,31 +372,27 @@ class TrellisVideoPlayerNode:
             }
         }
     
-    RETURN_TYPES = ("HTML", "STRING",)
-    RETURN_NAMES = ("player_html", "player_path",)
+    RETURN_TYPES = ("STRING", "STRING", "STRING")
+    RETURN_NAMES = ("video_path", "viewer_url", "viewer_path")
     FUNCTION = "create_player"
     CATEGORY = "Trellis"
     OUTPUT_NODE = True
-
-        # Add to TrellisVideoPlayerNode class
-    def ui(self, video_path, player_html, player_path):
-        # Extract video ID from path
-        import os
-        filename = os.path.basename(video_path)
-        video_id = filename.split("_")[0]
-        
-        # Return the direct URL to the viewer
-        view_url = f"/trellis/view-video/{video_id}"
-        
-        return {"ui": {"viewer": {"type": "iframe", "url": view_url}}}
     
     def create_player(self, video_path, display_width=800, autoplay="enabled", 
                     loop="enabled", controls="enabled"):
         """Create an HTML video player"""
         try:
+            # Make sure the path is absolute
+            video_path = os.path.abspath(video_path)
+
             if not video_path or not os.path.exists(video_path):
                 logger.error(f"Video file not found: {video_path}")
-                return self.create_error_html("Video file not found or invalid path"), ""
+                return video_path, "", ""
+                
+            # Extract video ID from path
+            filename = os.path.basename(video_path)
+            video_id = filename.split("_")[0]
+            viewer_url = f"/trellis/view-video/{video_id}"
             
             # Create a unique player filename
             player_dir = os.path.join("trellis_files", "players")
@@ -418,56 +401,20 @@ class TrellisVideoPlayerNode:
             player_filename = f"play_{os.path.basename(video_path).replace('.mp4', '')}.html"
             player_path = os.path.join(player_dir, player_filename)
             
-            # Get relative path to video
-            relative_video_path = os.path.relpath(video_path, os.path.dirname(player_path))
+            # For debugging
+            logger.info(f"Video Path: {video_path}")
+            logger.info(f"Video ID: {video_id}")
+            logger.info(f"Viewer URL: {viewer_url}")
             
-            # Configure player settings
-            autoplay_value = "autoplay" if autoplay == "enabled" else ""
-            loop_value = "loop" if loop == "enabled" else ""
-            controls_value = "controls" if controls == "enabled" else ""
-            
-            # Create the HTML content
-            html_content = f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Trellis Video Player</title>
-    <style>
-        body {{ margin: 0; padding: 20px; background-color: #1e1e1e; color: white; font-family: Arial, sans-serif; }}
-        .player-container {{ max-width: {display_width}px; margin: 0 auto; }}
-        video {{ width: 100%; height: auto; border-radius: 8px; box-shadow: 0 5px 15px rgba(0,0,0,0.3); }}
-        h1 {{ font-size: 24px; margin-bottom: 20px; }}
-        .info {{ margin-top: 15px; font-size: 14px; color: #aaa; }}
-    </style>
-</head>
-<body>
-    <div class="player-container">
-        <h1>Trellis 3D Model Preview</h1>
-        <video {controls_value} {autoplay_value} {loop_value}>
-            <source src="{relative_video_path}" type="video/mp4">
-            Your browser does not support the video tag.
-        </video>
-        <div class="info">
-            <p>File: {os.path.basename(video_path)}</p>
-            <p>Path: {video_path}</p>
-        </div>
-    </div>
-</body>
-</html>
-"""
-            
-            # Write the HTML file
-            with open(player_path, 'w') as f:
-                f.write(html_content)
-            
-            logger.info(f"Created video player at: {player_path}")
-            
-            return html_content, player_path
+            return video_path, viewer_url, player_path
             
         except Exception as e:
             logger.error(f"Error creating video player: {e}")
-            return self.create_error_html(str(e)), ""
+            return video_path, "", ""
+    
+    def ui(self, video_path, viewer_url, viewer_path):
+        """UI integration for the node"""
+        return {"ui": {"viewer": {"type": "iframe", "url": viewer_url}}}
     
     def create_error_html(self, error_message):
         """Create an HTML error page"""
@@ -492,8 +439,6 @@ class TrellisVideoPlayerNode:
 </body>
 </html>
 """
-
-
 
 
 class TrellisViewNode:

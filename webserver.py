@@ -1,16 +1,12 @@
 import os
-import folder_paths
-from aiohttp import web
 import server
+from aiohttp import web
 
-# Get the directory where this file is located (ComfyUI-Trellis folder)
+# Get the directory where this file is located
 base_path = os.path.dirname(os.path.realpath(__file__))
-
-# Path where trellis files are stored
 trellis_downloads_dir = os.path.join(os.getcwd(), "trellis_downloads")
-trellis_files_dir = os.path.join(os.getcwd(), "trellis_files")
 
-# Register routes to serve 3D models and videos
+# Add our routes to ComfyUI's server
 @server.PromptServer.instance.routes.get("/trellis/model/{model_id}")
 async def get_trellis_model(request):
     model_id = request.match_info["model_id"]
@@ -31,68 +27,73 @@ async def get_trellis_video(request):
     
     return web.FileResponse(video_path)
 
-# Add HTML page for model viewer
 @server.PromptServer.instance.routes.get("/trellis/view-model/{model_id}")
-async def view_trellis_model(request):
+async def view_model(request):
     model_id = request.match_info["model_id"]
-    model_url = f"/trellis/model/{model_id}"
     
+    # Simple HTML page with Three.js for 3D model viewing
     html = f"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="utf-8">
         <title>Trellis 3D Model Viewer</title>
-        <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
-        <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
         <style>
-            body {{ margin: 0; overflow: hidden; background-color: #222; }}
-            #viewer {{ width: 100%; height: 100vh; }}
+            body {{ margin: 0; padding: 0; overflow: hidden; }}
+            canvas {{ width: 100%; height: 100%; display: block; }}
         </style>
     </head>
     <body>
-        <div id="viewer"></div>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/build/three.min.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/controls/OrbitControls.js"></script>
+        <script src="https://cdn.jsdelivr.net/npm/three@0.157.0/examples/js/loaders/GLTFLoader.js"></script>
         <script>
-            const modelUrl = "{model_url}";
-            
-            // Setup Three.js scene
             const scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x333333);
+            
             const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 5;
+            
             const renderer = new THREE.WebGLRenderer();
             renderer.setSize(window.innerWidth, window.innerHeight);
-            document.getElementById('viewer').appendChild(renderer.domElement);
+            document.body.appendChild(renderer.domElement);
             
             // Add lights
             const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
             scene.add(ambientLight);
+            
             const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-            directionalLight.position.set(1, 1, 1);
+            directionalLight.position.set(0, 1, 1);
             scene.add(directionalLight);
             
             // Add controls
             const controls = new THREE.OrbitControls(camera, renderer.domElement);
             controls.enableDamping = true;
+            controls.dampingFactor = 0.25;
             
-            // Load model
+            // Load the model
             const loader = new THREE.GLTFLoader();
-            loader.load(modelUrl, (gltf) => {{
+            loader.load('/trellis/model/{model_id}', (gltf) => {{
                 const model = gltf.scene;
                 scene.add(model);
                 
-                // Center camera on model
+                // Center the model
                 const box = new THREE.Box3().setFromObject(model);
                 const center = box.getCenter(new THREE.Vector3());
                 const size = box.getSize(new THREE.Vector3());
-                const maxDim = Math.max(size.x, size.y, size.z);
                 
-                camera.position.set(
-                    center.x + maxDim * 2, 
-                    center.y + maxDim * 0.5, 
-                    center.z + maxDim * 2
-                );
+                // Adjust camera position based on model size
+                const maxDim = Math.max(size.x, size.y, size.z);
+                camera.position.set(center.x, center.y, center.z + maxDim * 2);
                 controls.target.copy(center);
+                controls.update();
+            }});
+            
+            // Handle window resize
+            window.addEventListener('resize', () => {{
+                camera.aspect = window.innerWidth / window.innerHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(window.innerWidth, window.innerHeight);
             }});
             
             // Animation loop
@@ -109,44 +110,64 @@ async def view_trellis_model(request):
     
     return web.Response(text=html, content_type="text/html")
 
-# Add HTML page for video player
 @server.PromptServer.instance.routes.get("/trellis/view-video/{video_id}")
-async def view_trellis_video(request):
+async def view_video(request):
     video_id = request.match_info["video_id"]
-    video_url = f"/trellis/video/{video_id}"
     
     html = f"""
     <!DOCTYPE html>
-    <html lang="en">
+    <html>
     <head>
-        <meta charset="UTF-8">
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <meta charset="utf-8">
         <title>Trellis Video Player</title>
         <style>
-            body {{ margin: 0; padding: 0; background-color: #222; }}
-            .container {{ 
-                display: flex; 
-                justify-content: center; 
-                align-items: center; 
-                height: 100vh; 
-                width: 100%;
-            }}
-            video {{ 
-                max-width: 100%; 
-                max-height: 100vh; 
-                box-shadow: 0 0 20px rgba(0,0,0,0.5);
-            }}
+            body {{ margin: 0; padding: 0; overflow: hidden; background: #222; }}
+            .container {{ display: flex; justify-content: center; align-items: center; height: 100vh; }}
+            video {{ max-width: 100%; max-height: 100vh; }}
         </style>
     </head>
     <body>
         <div class="container">
             <video controls autoplay loop>
-                <source src="{video_url}" type="video/mp4">
+                <source src="/trellis/video/{video_id}" type="video/mp4">
                 Your browser does not support the video tag.
             </video>
         </div>
     </body>
     </html>
+    """
+    
+    return web.Response(text=html, content_type="text/html")
+
+# Enable nodes to directly embed viewers in the UI
+@server.PromptServer.instance.routes.get("/trellis/node/view-model/{model_id}")
+async def node_view_model(request):
+    model_id = request.match_info["model_id"]
+    
+    # Small-sized embedded viewer for nodes
+    html = f"""
+    <iframe 
+        src="/trellis/view-model/{model_id}" 
+        style="width: 100%; height: 100%; border: none;"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+    ></iframe>
+    """
+    
+    return web.Response(text=html, content_type="text/html")
+
+@server.PromptServer.instance.routes.get("/trellis/node/view-video/{video_id}")
+async def node_view_video(request):
+    video_id = request.match_info["video_id"]
+    
+    # Small-sized embedded viewer for nodes
+    html = f"""
+    <iframe 
+        src="/trellis/view-video/{video_id}" 
+        style="width: 100%; height: 100%; border: none;"
+        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+        allowfullscreen
+    ></iframe>
     """
     
     return web.Response(text=html, content_type="text/html")
