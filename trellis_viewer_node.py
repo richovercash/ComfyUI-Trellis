@@ -77,6 +77,18 @@ class TrellisModelViewerNode:
             logger.error(f"Error creating viewer: {e}")
             return self.create_error_html(str(e)), ""
     
+    # Add to TrellisVideoPlayerNode class
+    def ui(self, glb_path, viewer_html, viewer_path):
+        # Extract model ID from path
+        import os
+        filename = os.path.basename(glb_path)
+        model_id = filename.split("_")[0]
+        
+        # Return the direct URL to the viewer
+        view_url = f"/trellis/view-model/{model_id}"
+        
+        return {"ui": {"viewer": {"type": "iframe", "url": view_url}}}
+
     def generate_three_js_viewer(self, model_path, background_color, width, height, 
                                auto_rotate, camera_distance):
         
@@ -378,6 +390,18 @@ class TrellisVideoPlayerNode:
     FUNCTION = "create_player"
     CATEGORY = "Trellis"
     OUTPUT_NODE = True
+
+        # Add to TrellisVideoPlayerNode class
+    def ui(self, video_path, player_html, player_path):
+        # Extract video ID from path
+        import os
+        filename = os.path.basename(video_path)
+        video_id = filename.split("_")[0]
+        
+        # Return the direct URL to the viewer
+        view_url = f"/trellis/view-video/{video_id}"
+        
+        return {"ui": {"viewer": {"type": "iframe", "url": view_url}}}
     
     def create_player(self, video_path, display_width=800, autoplay="enabled", 
                     loop="enabled", controls="enabled"):
@@ -529,7 +553,7 @@ class TrellisViewNode:
                 }
             }
         }
-    
+
 
 
     

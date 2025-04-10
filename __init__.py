@@ -40,13 +40,11 @@ for dir_path in dirs:
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-# Create combined NODE_CLASS_MAPPINGS
-NODE_CLASS_MAPPINGS = {**BASIC_NODE_CLASS_MAPPINGS, **ADVANCED_NODE_CLASS_MAPPINGS}
-NODE_DISPLAY_NAME_MAPPINGS = {**BASIC_NODE_DISPLAY_NAME_MAPPINGS, **ADVANCED_NODE_DISPLAY_NAME_MAPPINGS}
-
+# Import and initialize web server components
 # Import and initialize web server components
 try:
-    from . import webserver.server
+    # This is the correct way to import from a subdirectory
+    from .webserver import server
     has_web_server = True
 except ImportError:
     logger.warning("Web server components not loaded. Some features may not work correctly.")
@@ -54,6 +52,75 @@ except ImportError:
 
 # Define the web directory for ComfyUI to use for static file serving
 WEB_DIRECTORY = os.path.join(os.path.dirname(os.path.realpath(__file__)), "web")
+
+
+
+
+# Import node definitions one by one
+try:
+    from .comfyui_trellis_node import NODE_CLASS_MAPPINGS as BASIC_NODE_MAPPINGS
+    from .comfyui_trellis_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(BASIC_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(BASIC_NAME_MAPPINGS)
+    logger.info("Loaded basic Trellis nodes")
+except Exception as e:
+    logger.error(f"Error loading basic Trellis nodes: {e}")
+
+
+
+# Import the simplified viewer node
+try:
+    from .basic_viewer import NODE_CLASS_MAPPINGS as VIEWER_MAPPINGS
+    from .basic_viewer import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAMES
+    NODE_CLASS_MAPPINGS.update(VIEWER_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAMES)
+    print("Successfully loaded simplified viewer node")
+except Exception as e:
+    print(f"Error loading simplified viewer: {e}")
+
+
+# Import node definitions one by one
+try:
+    from .trellis_inline_node import NODE_CLASS_MAPPINGS as BASIC_NODE_MAPPINGS
+    from .trellis_inline_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(BASIC_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(BASIC_NAME_MAPPINGS)
+    logger.info("Loaded basic Trellis inline nodes")
+except Exception as e:
+    logger.error(f"Error loading basic Trellis inline nodes: {e}")
+
+
+# Try to import advanced nodes if they exist
+try:
+    from .trellis_advanced_nodes import NODE_CLASS_MAPPINGS as ADVANCED_NODE_MAPPINGS
+    from .trellis_advanced_nodes import NODE_DISPLAY_NAME_MAPPINGS as ADVANCED_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(ADVANCED_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(ADVANCED_NAME_MAPPINGS)
+    logger.info("Loaded advanced Trellis nodes")
+except Exception as e:
+    logger.error(f"Error loading advanced Trellis nodes: {e}")
+
+# Try to import viewer nodes if they exist
+try:
+    from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
+    from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
+    logger.info("Successfully loaded Trellis viewer nodes")
+except Exception as e:
+    logger.error(f"Error loading Trellis viewer nodes: {e}")
+
+
+
+# Try to import viewer nodes if they exist
+try:
+    from .trellis_preview_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
+    from .trellis_preview_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
+    NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
+    NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
+    logger.info("Successfully loaded Trellis preview nodes")
+except Exception as e:
+    logger.error(f"Error loading Trellis preview nodes: {e}")
 
 # Print startup message
 logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
@@ -66,75 +133,12 @@ else:
     logger.info("Web server components not loaded")
 
 
-# # Import node definitions one by one
-# try:
-#     from .comfyui_trellis_node import NODE_CLASS_MAPPINGS as BASIC_NODE_MAPPINGS
-#     from .comfyui_trellis_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NAME_MAPPINGS
-#     NODE_CLASS_MAPPINGS.update(BASIC_NODE_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(BASIC_NAME_MAPPINGS)
-#     logger.info("Loaded basic Trellis nodes")
-# except Exception as e:
-#     logger.error(f"Error loading basic Trellis nodes: {e}")
-
-
-
-# # Import the simplified viewer node
-# try:
-#     from .basic_viewer import NODE_CLASS_MAPPINGS as VIEWER_MAPPINGS
-#     from .basic_viewer import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAMES
-#     NODE_CLASS_MAPPINGS.update(VIEWER_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAMES)
-#     print("Successfully loaded simplified viewer node")
-# except Exception as e:
-#     print(f"Error loading simplified viewer: {e}")
-
-
-# # Import node definitions one by one
-# try:
-#     from .trellis_inline_node import NODE_CLASS_MAPPINGS as BASIC_NODE_MAPPINGS
-#     from .trellis_inline_node import NODE_DISPLAY_NAME_MAPPINGS as BASIC_NAME_MAPPINGS
-#     NODE_CLASS_MAPPINGS.update(BASIC_NODE_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(BASIC_NAME_MAPPINGS)
-#     logger.info("Loaded basic Trellis inline nodes")
-# except Exception as e:
-#     logger.error(f"Error loading basic Trellis inline nodes: {e}")
-
-
-# # Try to import advanced nodes if they exist
-# try:
-#     from .trellis_advanced_nodes import NODE_CLASS_MAPPINGS as ADVANCED_NODE_MAPPINGS
-#     from .trellis_advanced_nodes import NODE_DISPLAY_NAME_MAPPINGS as ADVANCED_NAME_MAPPINGS
-#     NODE_CLASS_MAPPINGS.update(ADVANCED_NODE_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(ADVANCED_NAME_MAPPINGS)
-#     logger.info("Loaded advanced Trellis nodes")
-# except Exception as e:
-#     logger.error(f"Error loading advanced Trellis nodes: {e}")
-
-# # Try to import viewer nodes if they exist
-# try:
-#     from .trellis_viewer_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
-#     from .trellis_viewer_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
-#     NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
-#     logger.info("Successfully loaded Trellis viewer nodes")
-# except Exception as e:
-#     logger.error(f"Error loading Trellis viewer nodes: {e}")
-
-
-
-# # Try to import viewer nodes if they exist
-# try:
-#     from .trellis_preview_node import NODE_CLASS_MAPPINGS as VIEWER_NODE_MAPPINGS
-#     from .trellis_preview_node import NODE_DISPLAY_NAME_MAPPINGS as VIEWER_NAME_MAPPINGS
-#     NODE_CLASS_MAPPINGS.update(VIEWER_NODE_MAPPINGS)
-#     NODE_DISPLAY_NAME_MAPPINGS.update(VIEWER_NAME_MAPPINGS)
-#     logger.info("Successfully loaded Trellis preview nodes")
-# except Exception as e:
-#     logger.error(f"Error loading Trellis preview nodes: {e}")
-
-
-
-
+# Add this line near the end of the file, before the print statements
+try:
+    from . import webserver
+    logger.info("Trellis web server loaded successfully")
+except Exception as e:
+    logger.error(f"Failed to load Trellis web server: {e}")
 
 # # Print startup message
 # logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
