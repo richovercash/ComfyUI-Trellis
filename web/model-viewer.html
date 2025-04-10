@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trellis 3D Model Viewer</title>
+    <style>
+        body { margin: 0; overflow: hidden; }
+        #viewer-container { width: 100%; height: 100%; position: absolute; }
+        #loading { 
+            position: absolute; 
+            top: 50%; 
+            left: 50%; 
+            transform: translate(-50%, -50%);
+            color: white;
+            background-color: rgba(0,0,0,0.7);
+            padding: 20px;
+            border-radius: 10px;
+        }
+    </style>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
+</head>
+<body>
+    <div id="viewer-container"></div>
+    <div id="loading">Loading 3D model...</div>
+    
+    <script>
+        // Get the model ID from URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const modelId = urlParams.get('model_id');
+        
+        if (!modelId) {
+            document.getElementById('loading').innerText = 'Error: No model specified';
+        } else {
+            const modelUrl = `/trellis/model/${modelId}`;
+            
+            // Setup Three.js scene
+            let scene, camera, renderer, controls, model;
+            
+            function init() {
+                // Create scene
+                scene = new THREE.Scene();
+                scene.background = new THREE.Color(0x222222);
+                
+                // Setup camera
+                camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 0.1, 1000);
+                camera.position.set(0, 1, 2);
+                
+                // Setup renderer
+                renderer = new THREE.WebGLRenderer({ antialias: true });
+                renderer.setSize(window.innerWidth, window.innerHeight);
+                renderer.outputEncoding = THREE.sRGBEncoding;
+                
+                // Add renderer to DOM
+                document.getElementById('viewer-container').appendChild(renderer.domElement);
+                
+                // Setup controls
+                controls = new THREE.OrbitControls(camera, renderer.domElement);
+                controls.enableDamping = true;
+                controls.dampingFactor = 0.05;
+                controls.autoRotate = true;
+                controls.autoRotateSpeed = 0.5;
+                
+                // Add lights
+                const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+                scene.add(ambientLight);
+                
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+                directionalLight.position.set(1, 2, 3);
+                scene.add(directionalLight);
+                
+                // Load the model
+                loadModel();
+                
+                // Handle window resize
+                window.addEventListener('resize', onWindowResize);
+            }
+            
+            function loadModel() {
+                const loader = new THREE.GLTFLoader();
+                
+                loader.load(
+                    modelUrl,
+                    function(gltf) {
+                        model = gltf.scene;
+                        
+                        // Center and scale the model
+                        const box = new THREE.Box3().setFromObject(model);
+                        const center = box.getCenter(new THREE.Vector3());
+                        const size = box.getSize(new THREE.Vector3());
+                        
+                        const maxDim = Math.max(size.x, size.y, size.z);
+                        const scale = 1.0 / maxDim;
+                        
+                        model.position.x = -center.x * scale;
+                        model.position.y = -center.y * scale;
+                        model.position.z = -center.z * scale;
+                        model.scale.set(scale, scale, scale);
+                        
+                        scene.add(model);
+                        
+                        // Hide loading message
+                        document.getElementById('loading').style.display = 'none';
+                    },
+                    function(xhr) {
+                        const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                        document.getElementById('loading').innerText = `Loading: ${percent}%`;
+                    },
+                    function(error) {
+                        console.error('Error loading model:', error);
+                        document.getElementById('loading').innerText = 'Error loading model';
+                    }
+                );
+            }
+            
+            function onWindowResize() {
+                const container = document.getElementById('viewer-container');
+                const width = container.clientWidth;
+                const height = container.clientHeight;
+                
+                camera.aspect = width / height;
+                camera.updateProjectionMatrix();
+                renderer.setSize(width, height);
+            }
+            
+            function animate() {
+                requestAnimationFrame(animate);
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            
+            // Initialize the viewer
+            init();
+            
+            // Start animation loop
+            animate();
+        }
+    </script>
+</body>
+</html>

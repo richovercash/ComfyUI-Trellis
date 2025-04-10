@@ -1,102 +1,113 @@
-// import { app } from "../../scripts/app.js";
+// The correct way to import app and api in ComfyUI
+import { app } from "/scripts/app.js";
+import { api } from "/scripts/api.js";
 
+
+// Register Trellis viewer extension
 app.registerExtension({
-    name: "Trellis.ModelViewer",
+    name: "Trellis.Viewer",
     
-    async nodeCreated(node) {
-        // Only process our viewer nodes
-        if (node.type !== "TrellisModelViewerNode" && node.type !== "TrellisVideoPlayerNode") return;
-        
-        // Add container for viewer
-        const previewContainer = document.createElement("div");
-        previewContainer.style.width = "100%";
-        previewContainer.style.height = "400px";
-        previewContainer.style.backgroundColor = "#1a1a1a";
-        previewContainer.style.borderRadius = "8px";
-        previewContainer.style.overflow = "hidden";
-        previewContainer.style.position = "relative";
-        
-        // Add placeholder text
-        const placeholderText = document.createElement("div");
-        placeholderText.style.position = "absolute";
-        placeholderText.style.top = "50%";
-        placeholderText.style.left = "50%";
-        placeholderText.style.transform = "translate(-50%, -50%)";
-        placeholderText.style.color = "#666";
-        placeholderText.style.fontSize = "14px";
-        placeholderText.textContent = "Connect a file path to view";
-        
-        previewContainer.appendChild(placeholderText);
-        
-        // Add to node
-        node.addCustomWidget({
-            name: "preview",
-            element: previewContainer
-        });
-        
-        // Keep references
-        node.previewContainer = previewContainer;
-        node.placeholderText = placeholderText;
-        
-        // Handle node execution
-        const onExecuted = node.onExecuted;
-        node.onExecuted = function(message) {
-            if (onExecuted) {
-                onExecuted.apply(this, arguments);
-            }
+    async beforeRegisterNodeDef(nodeType, nodeData) {
+        if (nodeData.name === "TrellisModelViewerNode") {
+            // Add custom preview and UI elements to the TrellisModelViewerNode
+            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function() {
+                const result = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
+                
+                // Create viewer container
+                const viewer = document.createElement("div");
+                viewer.style.width = "100%";
+                viewer.style.height = "300px";
+                viewer.style.backgroundColor = "#222";
+                viewer.style.borderRadius = "8px";
+                viewer.style.overflow = "hidden";
+                viewer.innerHTML = `<div style="padding: 10px; color: white;">Load a model to view</div>`;
+                this.viewerElement = viewer;
+                
+                this.widgets.push({
+                    element: viewer,
+                    type: "trellis_viewer",
+                    computeSize: () => [this.size[0], 300],
+                });
+                
+                return result;
+            };
             
-            // Check if we got HTML content
-            if (message && message.html) {
-                placeholderText.style.display = "none";
+            // Override process method to update viewer with new model
+            const onExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = async function(message) {
+                const result = onExecuted ? onExecuted.apply(this, arguments) : undefined;
                 
-                // Get file path from message
-                const filePath = message.viewer_path || "";
-                
-                // Register file for viewing
-                const fileId = Date.now().toString(); // Generate unique ID
-                
-                // Make sure registry exists
-                if (!app.nodeTrellisFiles) {
-                    app.nodeTrellisFiles = {};
+                if (message.glb_path) {
+                    // Extract session ID from path
+                    const pathParts = message.glb_path.split("/");
+                    const filename = pathParts[pathParts.length - 1];
+                    const sessionId = filename.split("_")[0];
+                    
+                    if (sessionId) {
+                        // Load the 3D viewer
+                        this.viewerElement.innerHTML = `
+                            <iframe 
+                                src="/trellis-viewer/model-viewer.html?model_id=${sessionId}" 
+                                style="width: 100%; height: 100%; border: none;"
+                            ></iframe>
+                        `;
+                    }
                 }
                 
-                // Store file info
-                app.nodeTrellisFiles[fileId] = {
-                    path: filePath,
-                    type: filePath.endsWith(".mp4") ? "video" : "model"
-                };
+                return result;
+            };
+        }
+        
+        if (nodeData.name === "TrellisVideoPlayerNode") {
+            // Add custom preview and UI elements to the TrellisVideoPlayerNode
+            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function() {
+                const result = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
                 
-                // Create iframe for viewer
-                const iframe = document.createElement("iframe");
-                iframe.style.width = "100%";
-                iframe.style.height = "100%";
-                iframe.style.border = "none";
-                iframe.src = `/trellis/view/${fileId}`;
+                // Create video container
+                const videoContainer = document.createElement("div");
+                videoContainer.style.width = "100%";
+                videoContainer.style.height = "300px";
+                videoContainer.style.backgroundColor = "#222";
+                videoContainer.style.borderRadius = "8px";
+                videoContainer.style.overflow = "hidden";
+                videoContainer.innerHTML = `<div style="padding: 10px; color: white;">Load a video to view</div>`;
+                this.videoElement = videoContainer;
                 
-                // Clear container
-                previewContainer.innerHTML = "";
-                previewContainer.appendChild(iframe);
+                this.widgets.push({
+                    element: videoContainer,
+                    type: "trellis_video_viewer",
+                    computeSize: () => [this.size[0], 300],
+                });
                 
-                // Add Open in New Window button
-                const openButton = document.createElement("button");
-                openButton.textContent = "Open in New Window";
-                openButton.style.position = "absolute";
-                openButton.style.bottom = "10px";
-                openButton.style.right = "10px";
-                openButton.style.zIndex = "100";
-                openButton.style.backgroundColor = "#333";
-                openButton.style.color = "#fff";
-                openButton.style.border = "none";
-                openButton.style.borderRadius = "4px";
-                openButton.style.padding = "5px 10px";
-                openButton.style.cursor = "pointer";
+                return result;
+            };
+            
+            // Override process method to update viewer with new video
+            const onExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = async function(message) {
+                const result = onExecuted ? onExecuted.apply(this, arguments) : undefined;
                 
-                openButton.onclick = () => {
-                    window.open(`/trellis/view/${fileId}`, "_blank");
-                };
+                if (message.video_path) {
+                    // Extract session ID from path
+                    const pathParts = message.video_path.split("/");
+                    const filename = pathParts[pathParts.length - 1];
+                    const sessionId = filename.split("_")[0];
+                    
+                    if (sessionId) {
+                        // Load the video player
+                        this.videoElement.innerHTML = `
+                            <iframe 
+                                src="/trellis-viewer/video-player.html?video_id=${sessionId}" 
+                                style="width: 100%; height: 100%; border: none;"
+                            ></iframe>
+                        `;
+                    }
+                }
                 
-                previewContainer.appendChild(openButton);
-            }
-        };
+                return result;
+            };
+        }
     }
 });
