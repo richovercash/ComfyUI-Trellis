@@ -57,6 +57,8 @@ BASE_DIR = Path(__file__).parent
 COMFY_DIR = BASE_DIR.parent.parent  # Points to ComfyUI root
 DOWNLOAD_DIR = BASE_DIR / "trellis_downloads"
 COMFY_DOWNLOAD_DIR = COMFY_DIR / "trellis_downloads"  # Points to ComfyUI/trellis_downloads
+WEB_DIRECTORY = BASE_DIR / "web"
+# Register web directory
 
 # Use both directories for media paths
 MEDIA_DIRS = [DOWNLOAD_DIR, COMFY_DOWNLOAD_DIR]
@@ -87,7 +89,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 # Dictionary of node modules to import
 node_modules = {
     'nodes.trellis_media_nodes': 'media viewer nodes',
-    'comfyui_trellis_node': 'basic Trellis WebSocket node',  # Keep this for WebSocket processing
+    'nodes.trellis_3d_nodes': '3D model loader and viewer nodes',
+    'comfyui_trellis_node': 'basic Trellis WebSocket node',
 }
 
 # Import all node modules

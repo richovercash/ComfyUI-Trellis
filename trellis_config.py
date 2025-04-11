@@ -10,7 +10,7 @@ class TrellisConfig:
     
     DEFAULT_CONFIG = {
         "server": {
-            "websocket_url": "ws://18.199.134.45:46173",
+            "websocket_url": "ws://localhost:5000", #"ws://18.199.134.45:46173"
             "rest_api_url": "http://localhost:8000",
             "timeout_seconds": 60,
             "reconnect_attempts": 3,

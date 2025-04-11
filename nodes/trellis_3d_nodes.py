@@ -10,6 +10,8 @@ def normalize_path(path):
     return str(path).replace('\\', '/')
 
 class TrellisModelLoaderNode:
+    SUPPORTED_FORMATS = ('.gltf', '.glb', '.obj', '.mtl', '.fbx', '.stl', '.usdz', '.dae')
+    
     @classmethod
     def INPUT_TYPES(s):
         # Use both trellis_downloads and input/3d directories
@@ -23,29 +25,76 @@ class TrellisModelLoaderNode:
         # Get files from both directories
         trellis_files = [normalize_path(os.path.join("trellis_downloads", f)) 
                         for f in os.listdir(trellis_dir) 
-                        if f.endswith(('.gltf', '.glb'))]
+                        if f.lower().endswith(s.SUPPORTED_FORMATS)]
         
         input_files = [normalize_path(os.path.join("3d", f)) 
                       for f in os.listdir(input_dir) 
-                      if f.endswith(('.gltf', '.glb'))]
+                      if f.lower().endswith(s.SUPPORTED_FORMATS)]
         
         all_files = sorted(trellis_files + input_files)
         
-        return {"required": {
-            "model_file": (all_files, {"file_upload": True}),
-        }}
+        return {
+            "required": {
+                "model_file": (all_files, {
+                    "file_upload": True,
+                    "file_types": s.SUPPORTED_FORMATS,
+                    "default": all_files[0] if all_files else ""
+                }),
+            },
+            "optional": {
+                "upload_to": (["input/3d", "trellis_downloads"], {"default": "input/3d"}),
+                "convert_to_glb": ("BOOLEAN", {"default": True}),
+            }
+        }
     
     RETURN_TYPES = ("STRING",)
     RETURN_NAMES = ("model_path",)
     FUNCTION = "process_model"
     CATEGORY = "Trellis"
     
-    def process_model(self, model_file):
+    def process_model(self, model_file, upload_to="input/3d", convert_to_glb=True):
         debugger.log_data("TrellisModelLoader", "Input", {
-            "model_file": model_file
+            "model_file": model_file,
+            "upload_to": upload_to,
+            "convert_to_glb": convert_to_glb
         })
         
         try:
+            # Handle file upload if it's a new file
+            if model_file.startswith("upload://"):
+                file_path = model_file[9:]  # Remove "upload://" prefix
+                filename = os.path.basename(file_path)
+                
+                # Determine target directory
+                if upload_to == "input/3d":
+                    target_dir = os.path.join(folder_paths.get_input_directory(), "3d")
+                else:
+                    target_dir = os.path.join(folder_paths.get_output_directory(), "trellis_downloads")
+                
+                # Create target directory if it doesn't exist
+                os.makedirs(target_dir, exist_ok=True)
+                
+                # Copy file to target location
+                target_path = os.path.join(target_dir, filename)
+                import shutil
+                shutil.copy2(file_path, target_path)
+                
+                # Convert to GLB if needed
+                if convert_to_glb and not filename.lower().endswith('.glb'):
+                    try:
+                        import trimesh
+                        scene = trimesh.load(target_path)
+                        glb_path = os.path.splitext(target_path)[0] + '.glb'
+                        scene.export(glb_path)
+                        target_path = glb_path
+                        logger.info(f"Converted model to GLB: {glb_path}")
+                    except ImportError:
+                        logger.warning("trimesh not installed, skipping GLB conversion")
+                    except Exception as e:
+                        logger.error(f"Error converting to GLB: {e}")
+                
+                model_file = normalize_path(os.path.relpath(target_path, folder_paths.get_input_directory() if upload_to == "input/3d" else folder_paths.get_output_directory()))
+            
             # Verify the file exists
             if model_file.startswith("trellis_downloads/"):
                 base_path = Path(folder_paths.get_output_directory())

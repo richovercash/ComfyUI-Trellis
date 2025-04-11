@@ -66,6 +66,122 @@ class TrellisPreview3DNode:
                 }
             }
         }
+    
+class TrellisModelViewerNode:
+    """Node that previews 3D models directly in ComfyUI"""
+    
+    @classmethod
+    def INPUT_TYPES(cls):
+        return {
+            "required": {
+                "file_path": ("STRING", {"default": ""}),
+            },
+            "optional": {
+                "file_type": (["auto", "model", "video"], {"default": "auto"}),
+            }
+        }
+    
+    RETURN_TYPES = ()
+    FUNCTION = "preview_file"
+    CATEGORY = "Trellis"
+    OUTPUT_NODE = True
+    
+    # def create_viewer(self, glb_path, ...): # Add this line     
+    def create_viewer(self, glb_path, background_color="#222222", display_width=800, 
+                    display_height=600, auto_rotate="enabled", camera_distance=2.0):
+        try:
+            glb_path = Path(glb_path)  # Convert to Path object
+            if not glb_path or not glb_path.exists():
+                logger.error(f"GLB file not found: {glb_path}")
+                return self.create_error_html("Model file not found or invalid path"), ""
+            
+            # Create a unique viewer filename
+            viewer_dir = Path("trellis_files") / "viewers"
+            viewer_dir.mkdir(parents=True, exist_ok=True)
+            
+            viewer_filename = f"view_{glb_path.name.replace('.glb', '')}.html"
+            viewer_path = viewer_dir / viewer_filename
+            
+            # Get relative path to model file
+            relative_model_path = glb_path.relative_to(viewer_path.parent)
+        
+                    # Configure viewer settings
+            auto_rotate_value = "true" if auto_rotate == "enabled" else "false"
+            
+            # Create the HTML content with our modular JS viewer
+            html_content = f"""<!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>Trellis 3D Model Viewer</title>
+        <style>
+            body {{ margin: 0; padding: 0; overflow: hidden; }}
+            #viewer-container {{ width: 100%; height: 100vh; position: absolute; }}
+        </style>
+        
+        <!-- Three.js and required addons -->
+        <script src="https://unpkg.com/three@0.132.2/build/three.min.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/MTLLoader.js"></script>
+        <script src="https://unpkg.com/three@0.132.2/examples/js/environments/RoomEnvironment.js"></script>
+        
+        <!-- Our custom viewer modules -->
+        <script src="../web/js/ModelViewer.js"></script>
+        <script src="../web/js/ModelLoader.js"></script>
+        <script src="../web/js/ViewerUI.js"></script>
+        <script src="../web/js/TrellisViewer.js"></script>
+    </head>
+    <body>
+        <div id="viewer-container"></div>
+        
+        <script>
+            document.addEventListener('DOMContentLoaded', function() {{
+                // Initialize viewer
+                var viewer = TrellisViewer.create({{
+                    container: document.getElementById('viewer-container'),
+                    viewer: {{
+                        backgroundColor: parseInt('{background_color.replace("#", "0x")}'),
+                        cameraPosition: [0, 1, {camera_distance}],
+                        controlsAutoRotate: {auto_rotate_value}
+                    }},
+                    ui: {{
+                        showControls: true,
+                        showProgress: true,
+                        showModelInfo: true,
+                        theme: 'dark'
+                    }}
+                }});
+                
+                // Load the model
+                viewer.loadModel('{relative_model_path}');
+                
+                // Handle window resize
+                window.addEventListener('resize', function() {{
+                    viewer.resize();
+                }});
+            }});
+        </script>
+    </body>
+    </html>
+    """
+            
+            # Write the HTML file
+            with open(viewer_path, 'w') as f:
+                f.write(html_content)
+            
+            logger.info(f"Created 3D viewer at: {viewer_path}")
+            
+            return html_content, viewer_path
+            
+        except Exception as e:
+            logger.error(f"Error creating viewer: {e}")
+            return self.create_error_html(str(e)), ""
+
+
 
 # Add web routes
 @PromptServer.instance.routes.get("/trellis/preview/files/{file_id}")
@@ -97,9 +213,11 @@ async def get_preview_file(request):
 
 # Register nodes
 NODE_CLASS_MAPPINGS = {
-    "TrellisPreview3D": TrellisPreview3DNode
+    "TrellisPreview3D": TrellisPreview3DNode,
+    "TrellisModelViewerNode": TrellisModelViewerNode
 }
 
 NODE_DISPLAY_NAME_MAPPINGS = {
-    "TrellisPreview3D": "Trellis Preview 3D"
+    "TrellisPreview3D": "Trellis Preview 3D",
+    "TrellisModelViewerNode": "Trellis Model Viewer"
 }

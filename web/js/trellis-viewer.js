@@ -58,97 +58,9 @@ app.registerExtension({
     async beforeRegisterNodeDef(nodeType, nodeData) {
         debug("beforeRegisterNodeDef called for", nodeData.name);
         
-        // Video Player Node
-        if (nodeData.name === "TrellisVideoPlayerNode") {
-            debug("Registering TrellisVideoPlayerNode UI");
-            
-            // Override the node's prototype
-            const onDrawBackground = nodeType.prototype.onDrawBackground;
-            nodeType.prototype.onDrawBackground = function(ctx) {
-                if (onDrawBackground) {
-                    onDrawBackground.apply(this, arguments);
-                }
-                
-                // Make the node bigger
-                this.size[1] = 300;
-            };
-
-            const originalNodeCreated = nodeType.prototype.onNodeCreated;
-            nodeType.prototype.onNodeCreated = function() {
-                debug("TrellisVideoPlayerNode: onNodeCreated called");
-                try {
-                    const result = originalNodeCreated ? originalNodeCreated.apply(this, arguments) : undefined;
-                    
-                    // Create video element
-                    const videoContainer = document.createElement("div");
-                    videoContainer.style.width = "100%";
-                    videoContainer.style.height = "280px";
-                    videoContainer.style.backgroundColor = "#222";
-                    videoContainer.style.borderRadius = "8px";
-                    videoContainer.style.overflow = "hidden";
-                    videoContainer.style.marginTop = "10px";
-                    
-                    const video = document.createElement("video");
-                    video.style.width = "100%";
-                    video.style.height = "100%";
-                    video.controls = true;
-                    video.style.objectFit = "contain";
-                    
-                    videoContainer.appendChild(video);
-                    this.videoElement = video;
-                    
-                    // Add widget
-                    this.addWidget("preview", "video_preview", "", () => {}, {
-                        element: videoContainer,
-                        serialize: false
-                    });
-                    
-                    return result;
-                } catch (error) {
-                    console.error("Error in TrellisVideoPlayerNode creation:", error);
-                }
-            };
-
-            // Handle video updates
-            const originalExecuted = nodeType.prototype.onExecuted;
-            nodeType.prototype.onExecuted = function(message) {
-                debug("TrellisVideoPlayerNode executed with message:", message);
-                try {
-                    if (message?.ui?.video_path) {
-                        const videoPath = message.ui.video_path;
-                        debug("Raw video path:", videoPath);
-                        
-                        const videoId = getFileId(videoPath);
-                        if (videoId && this.videoElement) {
-                            const viewerPath = `/trellis/view-video/${videoId}`;
-                            debug("Loading video from:", viewerPath);
-                            
-                            this.videoElement.src = viewerPath;
-                            this.videoElement.load();
-                            
-                            this.videoElement.onerror = () => {
-                                debug("Error loading video, trying media path fallback");
-                                const mediaPath = api.getMediaPath(videoPath);
-                                this.videoElement.src = mediaPath;
-                                this.videoElement.load();
-                            };
-                        } else {
-                            debug("Could not extract video ID from path:", videoPath);
-                        }
-                    }
-                    
-                    if (originalExecuted) {
-                        return originalExecuted.apply(this, arguments);
-                    }
-                } catch (error) {
-                    console.error("Error in video node execution:", error);
-                }
-            };
-        }
-
-        // 3D Model Viewer Node
-        if (nodeData.name === "TrellisModelViewerNode") {
-            debug("Registering TrellisModelViewerNode UI");
+        // Handle both old and new model viewer nodes
+        if (nodeData.name === "TrellisModelViewerNode" || nodeData.name === "TrellisModelViewer") {
+            debug("Registering model viewer UI for", nodeData.name);
             
             // Override the node's prototype
             const onDrawBackground = nodeType.prototype.onDrawBackground;
@@ -233,20 +145,17 @@ app.registerExtension({
             // Handle model updates
             const onExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
-                debug("TrellisModelViewerNode executed with message:", message);
+                debug("Model viewer executed with message:", message);
                 
                 try {
                     if (message?.ui?.model_path && window.THREE && window.GLTFLoader) {
                         const modelPath = message.ui.model_path;
                         debug("Raw model path:", modelPath);
                         
-                        const modelId = getFileId(modelPath);
-                        if (modelId && this.threeScene) {
-                            const viewerPath = `/trellis/view-model/${modelId}`;
-                            debug("Loading model from:", viewerPath);
-                            
+                        if (modelPath && this.threeScene) {
+                            // Try loading directly first
                             const loader = new GLTFLoader();
-                            loader.load(viewerPath, 
+                            loader.load(modelPath, 
                                 (gltf) => {
                                     debug("Model loaded successfully");
                                     loadModelIntoScene(gltf, this);
@@ -256,22 +165,44 @@ app.registerExtension({
                                     debug(`Loading progress: ${percent}%`);
                                 },
                                 (error) => {
-                                    debug("Error loading model, trying media path fallback");
+                                    debug("Error loading directly, trying media path");
                                     const mediaPath = api.getMediaPath(modelPath);
                                     loader.load(mediaPath,
                                         (gltf) => {
-                                            debug("Model loaded successfully (fallback)");
+                                            debug("Model loaded successfully (media path)");
                                             loadModelIntoScene(gltf, this);
                                         },
                                         undefined,
                                         (error) => {
-                                            console.error("Error loading model:", error);
+                                            debug("Error loading from media path, trying viewer path");
+                                            // Try the viewer path as last resort
+                                            const modelId = getFileId(modelPath);
+                                            if (modelId) {
+                                                const viewerPath = `/trellis/view-model/${modelId}`;
+                                                loader.load(viewerPath,
+                                                    (gltf) => {
+                                                        debug("Model loaded successfully (viewer path)");
+                                                        loadModelIntoScene(gltf, this);
+                                                    },
+                                                    undefined,
+                                                    (finalError) => {
+                                                        console.error("All loading attempts failed:", {
+                                                            direct: error,
+                                                            media: error,
+                                                            viewer: finalError
+                                                        });
+                                                    }
+                                                );
+                                            }
                                         }
                                     );
                                 }
                             );
                         } else {
-                            debug("Could not extract model ID from path:", modelPath);
+                            debug("Invalid model path or scene not initialized:", {
+                                path: modelPath,
+                                hasScene: !!this.threeScene
+                            });
                         }
                     }
                     
@@ -279,7 +210,95 @@ app.registerExtension({
                         return onExecuted.apply(this, arguments);
                     }
                 } catch (error) {
-                    console.error("Error in model node execution:", error);
+                    console.error("Error in model viewer execution:", error);
+                }
+            };
+        }
+
+        // Handle both old and new video player nodes
+        if (nodeData.name === "TrellisVideoPlayerNode") {
+            debug("Registering video player UI");
+            
+            // Override the node's prototype
+            const onDrawBackground = nodeType.prototype.onDrawBackground;
+            nodeType.prototype.onDrawBackground = function(ctx) {
+                if (onDrawBackground) {
+                    onDrawBackground.apply(this, arguments);
+                }
+                
+                // Make the node bigger
+                this.size[1] = 300;
+            };
+
+            const originalNodeCreated = nodeType.prototype.onNodeCreated;
+            nodeType.prototype.onNodeCreated = function() {
+                debug("TrellisVideoPlayerNode: onNodeCreated called");
+                try {
+                    const result = originalNodeCreated ? originalNodeCreated.apply(this, arguments) : undefined;
+                    
+                    // Create video element
+                    const videoContainer = document.createElement("div");
+                    videoContainer.style.width = "100%";
+                    videoContainer.style.height = "280px";
+                    videoContainer.style.backgroundColor = "#222";
+                    videoContainer.style.borderRadius = "8px";
+                    videoContainer.style.overflow = "hidden";
+                    videoContainer.style.marginTop = "10px";
+                    
+                    const video = document.createElement("video");
+                    video.style.width = "100%";
+                    video.style.height = "100%";
+                    video.controls = true;
+                    video.style.objectFit = "contain";
+                    
+                    videoContainer.appendChild(video);
+                    this.videoElement = video;
+                    
+                    // Add widget
+                    this.addWidget("preview", "video_preview", "", () => {}, {
+                        element: videoContainer,
+                        serialize: false
+                    });
+                    
+                    return result;
+                } catch (error) {
+                    console.error("Error in TrellisVideoPlayerNode creation:", error);
+                }
+            };
+
+            // Handle video updates
+            const originalExecuted = nodeType.prototype.onExecuted;
+            nodeType.prototype.onExecuted = function(message) {
+                debug("TrellisVideoPlayerNode executed with message:", message);
+                try {
+                    if (message?.ui?.video_path) {
+                        const videoPath = message.ui.video_path;
+                        debug("Raw video path:", videoPath);
+                        
+                        const videoId = getFileId(videoPath);
+                        if (videoId && this.videoElement) {
+                            const viewerPath = `/trellis/view-video/${videoId}`;
+                            debug("Loading video from:", viewerPath);
+                            
+                            this.videoElement.src = viewerPath;
+                            this.videoElement.load();
+                            
+                            this.videoElement.onerror = () => {
+                                debug("Error loading video, trying media path fallback");
+                                const mediaPath = api.getMediaPath(videoPath);
+                                this.videoElement.src = mediaPath;
+                                this.videoElement.load();
+                            };
+                        } else {
+                            debug("Could not extract video ID from path:", videoPath);
+                        }
+                    }
+                    
+                    if (originalExecuted) {
+                        return originalExecuted.apply(this, arguments);
+                    }
+                } catch (error) {
+                    console.error("Error in video node execution:", error);
                 }
             };
         }

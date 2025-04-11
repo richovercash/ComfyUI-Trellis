@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Trellis 3D Model Viewer Example</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      font-family: Arial, sans-serif;
+      background-color: #f0f0f0;
+    }
+    
+    .container {
+      display: flex;
+      height: 100vh;
+    }
+    
+    .sidebar {
+      width: 300px;
+      background-color: #333;
+      color: white;
+      padding: 20px;
+      box-sizing: border-box;
+      overflow-y: auto;
+    }
+    
+    .main {
+      flex: 1;
+      position: relative;
+    }
+    
+    .viewer-container {
+      width: 100%;
+      height: 100%;
+      background-color: #222;
+    }
+    
+    h1 {
+      margin-top: 0;
+      font-size: 24px;
+    }
+    
+    h2 {
+      font-size: 18px;
+      margin-top: 20px;
+    }
+    
+    .model-list {
+      list-style: none;
+      padding: 0;
+      margin: 0;
+    }
+    
+    .model-list li {
+      margin-bottom: 10px;
+      padding: 10px;
+      background-color: #444;
+      border-radius: 4px;
+      cursor: pointer;
+      transition: background-color 0.2s;
+    }
+    
+    .model-list li:hover {
+      background-color: #555;
+    }
+    
+    .model-list li.active {
+      background-color: #4285f4;
+    }
+    
+    .settings {
+      margin-top: 20px;
+    }
+    
+    .settings label {
+      display: block;
+      margin-bottom: 10px;
+    }
+    
+    button {
+      background-color: #4285f4;
+      color: white;
+      border: none;
+      padding: 8px 12px;
+      margin-top: 10px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    
+    button:hover {
+      background-color: #2a75f3;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="sidebar">
+      <h1>Trellis Viewer</h1>
+      
+      <h2>Models</h2>
+      <ul class="model-list" id="model-list">
+        <li data-url="models/example.glb" class="active">Example GLB Model</li>
+        <li data-url="models/example.obj">Example OBJ Model</li>
+        <li data-url="models/cube.obj">Simple Cube</li>
+      </ul>
+      
+      <div class="settings">
+        <h2>Settings</h2>
+        
+        <label>
+          <input type="checkbox" id="auto-rotate" checked> Auto Rotate
+        </label>
+        
+        <label>
+          Background Color:
+          <input type="color" id="bg-color" value="#222222">
+        </label>
+        
+        <label>
+          <select id="theme-select">
+            <option value="dark" selected>Dark Theme</option>
+            <option value="light">Light Theme</option>
+          </select>
+        </label>
+        
+        <button id="reset-camera">Reset Camera</button>
+        <button id="center-model">Center Model</button>
+      </div>
+    </div>
+    
+    <div class="main">
+      <div class="viewer-container" id="viewer-container"></div>
+    </div>
+  </div>
+  
+  <!-- Load Three.js and its modules -->
+  <script src="https://unpkg.com/three@0.132.2/build/three.min.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/controls/OrbitControls.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/DRACOLoader.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/OBJLoader.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/loaders/MTLLoader.js"></script>
+  <script src="https://unpkg.com/three@0.132.2/examples/js/environments/RoomEnvironment.js"></script>
+  
+  <!-- Load our viewer scripts -->
+  <script src="ModelViewer.js"></script>
+  <script src="ModelLoader.js"></script>
+  <script src="ViewerUI.js"></script>
+  <script src="TrellisViewer.js"></script>
+  
+  <script>
+    // Initialize viewer when document is loaded
+    document.addEventListener('DOMContentLoaded', function() {
+      // Create viewer
+      var viewer = TrellisViewer.create({
+        container: '#viewer-container',
+        viewer: {
+          backgroundColor: 0x222222,
+          controlsAutoRotate: true
+        },
+        ui: {
+          showStats: true,
+          theme: 'dark'
+        }
+      });
+      
+      // Add event listeners for model loading
+      viewer.on('loadStart', function(data) {
+        console.log('Loading model: ' + data.url);
+      });
+      
+      viewer.on('modelLoaded', function(data) {
+        console.log('Model loaded:', data.info);
+      });
+      
+      viewer.on('loadError', function(data) {
+        console.error('Error loading model:', data.error);
+      });
+      
+      // Load the first model
+      var activeModelItem = document.querySelector('.model-list li.active');
+      if (activeModelItem) {
+        viewer.loadModel(activeModelItem.dataset.url);
+      }
+      
+      // Set up model list clicks
+      var modelItems = document.querySelectorAll('.model-list li');
+      modelItems.forEach(function(item) {
+        item.addEventListener('click', function() {
+          // Update active state
+          modelItems.forEach(function(mi) {
+            mi.classList.remove('active');
+          });
+          this.classList.add('active');
+          
+          // Load the model
+          viewer.loadModel(this.dataset.url);
+        });
+      });
+      
+      // Set up auto-rotate toggle
+      var autoRotateCheckbox = document.getElementById('auto-rotate');
+      autoRotateCheckbox.addEventListener('change', function() {
+        viewer.setAutoRotate(this.checked);
+      });
+      
+      // Set up background color change
+      var bgColorInput = document.getElementById('bg-color');
+      bgColorInput.addEventListener('input', function() {
+        viewer.setBackground(this.value);
+      });
+      
+      // Set up theme change
+      var themeSelect = document.getElementById('theme-select');
+      themeSelect.addEventListener('change', function() {
+        viewer.setTheme(this.value);
+      });
+      
+      // Set up camera reset
+      var resetCameraButton = document.getElementById('reset-camera');
+      resetCameraButton.addEventListener('click', function() {
+        viewer.resetCamera();
+      });
+      
+      // Set up center model
+      var centerModelButton = document.getElementById('center-model');
+      centerModelButton.addEventListener('click', function() {
+        viewer.centerModel();
+      });
+      
+      // Handle window resize
+      window.addEventListener('resize', function() {
+        viewer.resize();
+      });
+    });
+  </script>
+</body>
+</html>
