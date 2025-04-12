@@ -1,6 +1,5 @@
 // The correct way to import app and api in ComfyUI
 import { app } from "/scripts/app.js";
-import { api } from "/scripts/api.js";
 
 // Load Three.js from CDN directly
 const script = document.createElement('script');
@@ -8,6 +7,15 @@ script.src = 'https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js'
 document.head.appendChild(script);
 
 console.log("Trellis viewer script loading...");
+// At the top of the file
+const DEBUG = true;
+function debug(...args) {
+    if (DEBUG) {
+        console.log("[Trellis Debug]", ...args);
+        // Send to backend for logging
+        logToBackend("JavaScript", args);
+    }
+}
 
 script.onload = () => {
     console.log("Three.js loaded successfully");
@@ -16,28 +24,58 @@ script.onload = () => {
     gltfScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/loaders/GLTFLoader.js';
     document.head.appendChild(gltfScript);
 
-    // Load OrbitControls after GLTFLoader
     gltfScript.onload = () => {
+        console.log("GLTFLoader loaded successfully");
+        // Load OrbitControls after GLTFLoader
         const orbitScript = document.createElement('script');
         orbitScript.src = 'https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js';
         document.head.appendChild(orbitScript);
+        
+        orbitScript.onload = () => {
+            console.log("OrbitControls loaded successfully");
+        };
     };
 };
 
-// At the top of the file
-const DEBUG = true;
-function debug(...args) {
-    if (DEBUG) {
-        console.log("[Trellis]", ...args);
-        // Send to backend for logging
-        logToBackend("JavaScript", args);
+function getMediaPath(path) {
+    if (!path) return null;
+    console.log("[Trellis Debug] getMediaPath called with:", path);
+    
+    // If it's already a complete URL
+    if (path.startsWith('http://') || path.startsWith('https://')) {
+        return path;
     }
+    
+    // Handle the case where path is an array (from your logs)
+    if (Array.isArray(path)) {
+        path = path.join('');
+    }
+    
+    // Extract the model ID from the path
+    let modelId;
+    
+    if (path.includes('trellis_downloads/')) {
+        // Extract the model ID from a path like "trellis_downloads/96129d40-016d-4d13-ad85-587cceb14188_output.glb"
+        const match = path.match(/trellis_downloads\/([^\/]+)/);
+        if (match) {
+            modelId = match[1];
+        }
+    } else if (path.includes('_output.glb')) {
+        // Extract just the model ID if it's a filename like "96129d40-016d-4d13-ad85-587cceb14188_output.glb"
+        modelId = path.split('_output.glb')[0];
+    } else {
+        // Assume the path is already the model ID
+        modelId = path;
+    }
+    
+    // Format the URL to match the server route
+    return `/trellis/view-model/${modelId}`;
 }
 
-// Function to send logs to backend
+// Update the logToBackend function to use fetch directly
 async function logToBackend(source, data) {
     try {
-        await api.fetchApi('/trellis/debug', {
+        await fetch('/trellis/debug', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
@@ -73,153 +111,238 @@ app.registerExtension({
                 this.size[1] = 300;
             };
 
-            const onNodeCreated = nodeType.prototype.onNodeCreated;
+            // Simple fixed-size node creation
             nodeType.prototype.onNodeCreated = function() {
                 console.log("Creating TrellisModelViewerNode");
-                const result = onNodeCreated ? onNodeCreated.apply(this, arguments) : undefined;
-                
-                // Create 3D viewer container
-                const container = document.createElement("div");
-                container.style.width = "100%";
-                container.style.height = "280px";
-                container.style.backgroundColor = "#222";
-                container.style.borderRadius = "8px";
-                container.style.overflow = "hidden";
-                container.style.marginTop = "10px";
-                
-                // Initialize Three.js
-                if (window.THREE) {
-                    console.log("Three.js is available");
-                    const scene = new THREE.Scene();
-                    scene.background = new THREE.Color(0x222222);
+                try {
+                    // Create container with fixed dimensions
+                    const container = document.createElement("div");
+                    container.style.width = "380px";
+                    container.style.height = "280px";
+                    container.style.backgroundColor = "#222";
+                    container.style.borderRadius = "8px";
+                    container.style.overflow = "hidden";
+                    container.style.position = "relative";
                     
-                    const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
-                    camera.position.z = 5;
+                    // Status text
+                    const status = document.createElement("div");
+                    status.style.position = "absolute";
+                    status.style.top = "5px";
+                    status.style.left = "5px";
+                    status.style.color = "white";
+                    status.style.background = "rgba(0,0,0,0.5)";
+                    status.style.padding = "5px";
+                    status.style.borderRadius = "3px";
+                    status.textContent = "Initializing...";
+                    container.appendChild(status);
+                    this.statusText = status;
                     
-                    const renderer = new THREE.WebGLRenderer({ antialias: true });
-                    renderer.setSize(container.clientWidth, container.clientHeight);
-                    container.appendChild(renderer.domElement);
+                    // Add widget
+                    this.addWidget("preview", "model_preview", "", () => {}, {
+                        element: container,
+                        serialize: false
+                    });
                     
-                    if (window.OrbitControls) {
-                        console.log("OrbitControls is available");
-                        const controls = new OrbitControls(camera, renderer.domElement);
-                        controls.enableDamping = true;
-                        this.threeControls = controls;
-                    }
+                    // Store container reference
+                    this.viewerContainer = container;
                     
-                    // Add lighting
-                    const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
-                    scene.add(ambientLight);
-                    
-                    const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-                    directionalLight.position.set(5, 5, 5);
-                    scene.add(directionalLight);
-                    
-                    // Animation loop
-                    const animate = () => {
-                        requestAnimationFrame(animate);
-                        if (this.threeControls) this.threeControls.update();
-                        renderer.render(scene, camera);
-                    };
-                    animate();
-                    
-                    // Store references
-                    this.threeContainer = container;
-                    this.threeScene = scene;
-                    this.threeCamera = camera;
-                    this.threeRenderer = renderer;
-                } else {
-                    console.error("Three.js not loaded!");
-                    container.innerHTML = "Error: Three.js not loaded";
+                    // Initialize 3D scene after a delay
+                    setTimeout(() => {
+                        if (window.THREE) {
+                            // Create fixed-size renderer
+                            const renderer = new THREE.WebGLRenderer({ antialias: true });
+                            renderer.setSize(380, 280);
+                            container.appendChild(renderer.domElement);
+                            
+                            // Create scene
+                            const scene = new THREE.Scene();
+                            scene.background = new THREE.Color(0x222222);
+                            
+                            // Create camera
+                            const camera = new THREE.PerspectiveCamera(75, 380/280, 0.1, 1000);
+                            camera.position.z = 5;
+                            
+                            // Add light
+                            const light = new THREE.AmbientLight(0xffffff, 0.7);
+                            scene.add(light);
+                            
+                            const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                            dirLight.position.set(1, 1, 1);
+                            scene.add(dirLight);
+                            
+                            // Add test cube
+                            const geometry = new THREE.BoxGeometry(1, 1, 1);
+                            const material = new THREE.MeshBasicMaterial({ color: 0x00ff00 });
+                            const cube = new THREE.Mesh(geometry, material);
+                            scene.add(cube);
+                            
+                            // Store references
+                            this.threeScene = scene;
+                            this.threeCamera = camera;
+                            this.threeRenderer = renderer;
+                            this.testCube = cube;
+                            
+                            // Animation loop
+                            const animate = () => {
+                                requestAnimationFrame(animate);
+                                cube.rotation.x += 0.01;
+                                cube.rotation.y += 0.01;
+                                renderer.render(scene, camera);
+                            };
+                            animate();
+                            
+                            // Add orbit controls
+                            if (window.THREE.OrbitControls) {
+                                this.controls = new THREE.OrbitControls(camera, renderer.domElement);
+                            }
+                            
+                            // Update status
+                            this.statusText.textContent = "Ready";
+                            setTimeout(() => {
+                                this.statusText.style.opacity = 0;
+                                this.statusText.style.transition = "opacity 1s";
+                            }, 2000);
+                            
+                            debug("Three.js scene initialized");
+                        }
+                    }, 500);
+                } catch (error) {
+                    console.error("Error creating model viewer:", error);
                 }
-                
-                // Add widget
-                this.addWidget("preview", "model_preview", "", () => {}, {
-                    element: container,
-                    serialize: false
-                });
-                
-                return result;
             };
 
-            // Handle model updates
-            const onExecuted = nodeType.prototype.onExecuted;
+            // Simple model loading
             nodeType.prototype.onExecuted = function(message) {
-                debug("Model viewer executed with message:", message);
+                debug("Model viewer onExecuted called with:", message);
                 
                 try {
-                    if (message?.ui?.model_path && window.THREE && window.GLTFLoader) {
-                        const modelPath = message.ui.model_path;
-                        debug("Raw model path:", modelPath);
-                        
-                        if (modelPath && this.threeScene) {
-                            // Try loading directly first
-                            const loader = new GLTFLoader();
-                            loader.load(modelPath, 
-                                (gltf) => {
-                                    debug("Model loaded successfully");
-                                    loadModelIntoScene(gltf, this);
-                                },
-                                (progress) => {
-                                    const percent = (progress.loaded / progress.total * 100).toFixed(2);
-                                    debug(`Loading progress: ${percent}%`);
-                                },
-                                (error) => {
-                                    debug("Error loading directly, trying media path");
-                                    const mediaPath = api.getMediaPath(modelPath);
-                                    loader.load(mediaPath,
-                                        (gltf) => {
-                                            debug("Model loaded successfully (media path)");
-                                            loadModelIntoScene(gltf, this);
-                                        },
-                                        undefined,
-                                        (error) => {
-                                            debug("Error loading from media path, trying viewer path");
-                                            // Try the viewer path as last resort
-                                            const modelId = getFileId(modelPath);
-                                            if (modelId) {
-                                                const viewerPath = `/trellis/view-model/${modelId}`;
-                                                loader.load(viewerPath,
-                                                    (gltf) => {
-                                                        debug("Model loaded successfully (viewer path)");
-                                                        loadModelIntoScene(gltf, this);
-                                                    },
-                                                    undefined,
-                                                    (finalError) => {
-                                                        console.error("All loading attempts failed:", {
-                                                            direct: error,
-                                                            media: error,
-                                                            viewer: finalError
-                                                        });
-                                                    }
-                                                );
-                                            }
-                                        }
-                                    );
-                                }
-                            );
-                        } else {
-                            debug("Invalid model path or scene not initialized:", {
-                                path: modelPath,
-                                hasScene: !!this.threeScene
-                            });
-                        }
+                    // Extract model path
+                    let modelPath;
+                    if (message?.model_path) {
+                        modelPath = Array.isArray(message.model_path) 
+                            ? message.model_path.join('') 
+                            : message.model_path;
+                    } else if (message?.ui?.model_path) {
+                        modelPath = Array.isArray(message.ui.model_path)
+                            ? message.ui.model_path.join('')
+                            : message.ui.model_path;
                     }
                     
-                    if (onExecuted) {
-                        return onExecuted.apply(this, arguments);
+                    debug("Raw model path:", modelPath);
+                    
+                    // Check if scene is ready
+                    if (!this.threeScene || !this.threeRenderer) {
+                        debug("Scene not ready yet");
+                        return;
                     }
+                    
+                    if (!modelPath) {
+                        debug("No model path provided");
+                        return;
+                    }
+                    
+                    // Hide test cube
+                    if (this.testCube) {
+                        this.testCube.visible = false;
+                    }
+                    
+                    // Generate media path
+                    const mediaPath = getMediaPath(modelPath);
+                    debug("Loading from:", mediaPath);
+                    
+                    // Show loading status
+                    if (this.statusText) {
+                        this.statusText.textContent = "Loading model...";
+                        this.statusText.style.opacity = 1;
+                    }
+                    
+                    // Check if loader is available
+                    if (!window.THREE || !window.THREE.GLTFLoader) {
+                        debug("GLTFLoader not available");
+                        return;
+                    }
+                    
+                    // Load model
+                    const loader = new THREE.GLTFLoader();
+                    loader.load(
+                        mediaPath, 
+                        (gltf) => {
+                            debug("Model loaded successfully");
+                            
+                            // Remove previous models but keep lights
+                            this.threeScene.children = this.threeScene.children.filter(
+                                child => child instanceof THREE.Light || child === this.testCube
+                            );
+                            
+                            // Add model
+                            this.threeScene.add(gltf.scene);
+                            
+                            // Scale and center
+                            const box = new THREE.Box3().setFromObject(gltf.scene);
+                            const center = box.getCenter(new THREE.Vector3());
+                            const size = box.getSize(new THREE.Vector3());
+                            
+                            // Center model
+                            gltf.scene.position.x = -center.x;
+                            gltf.scene.position.y = -center.y;
+                            gltf.scene.position.z = -center.z;
+                            
+                            // Scale model
+                            const maxDim = Math.max(size.x, size.y, size.z);
+                            if (maxDim > 0) {
+                                const scale = 2 / maxDim;
+                                gltf.scene.scale.set(scale, scale, scale);
+                            }
+                            
+                            // Update camera
+                            this.threeCamera.position.set(0, 0, 5);
+                            
+                            // Update status
+                            if (this.statusText) {
+                                this.statusText.textContent = "Model displayed";
+                                setTimeout(() => {
+                                    this.statusText.style.opacity = 0;
+                                }, 2000);
+                            }
+                        },
+                        // Progress callback
+                        (progress) => {
+                            const percent = (progress.loaded / progress.total * 100).toFixed(2);
+                            debug(`Loading progress: ${percent}%`);
+                            
+                            if (this.statusText) {
+                                this.statusText.textContent = `Loading: ${percent}%`;
+                            }
+                        },
+                        // Error callback
+                        (error) => {
+                            debug("Error loading model:", {
+                                error: error.message,
+                                modelPath,
+                                mediaPath
+                            });
+                            
+                            if (this.statusText) {
+                                this.statusText.textContent = "Error loading model";
+                                this.statusText.style.color = "red";
+                            }
+                            
+                            // Show test cube again
+                            if (this.testCube) {
+                                this.testCube.visible = true;
+                            }
+                        }
+                    );
                 } catch (error) {
-                    console.error("Error in model viewer execution:", error);
+                    debug("Error in model viewer execution:", error);
                 }
             };
         }
 
-        // Handle both old and new video player nodes
+        // Handle video player node
         if (nodeData.name === "TrellisVideoPlayerNode") {
             debug("Registering video player UI");
             
-            // Override the node's prototype
             const onDrawBackground = nodeType.prototype.onDrawBackground;
             nodeType.prototype.onDrawBackground = function(ctx) {
                 if (onDrawBackground) {
@@ -230,12 +353,9 @@ app.registerExtension({
                 this.size[1] = 300;
             };
 
-            const originalNodeCreated = nodeType.prototype.onNodeCreated;
             nodeType.prototype.onNodeCreated = function() {
                 debug("TrellisVideoPlayerNode: onNodeCreated called");
                 try {
-                    const result = originalNodeCreated ? originalNodeCreated.apply(this, arguments) : undefined;
-                    
                     // Create video element
                     const videoContainer = document.createElement("div");
                     videoContainer.style.width = "100%";
@@ -243,7 +363,6 @@ app.registerExtension({
                     videoContainer.style.backgroundColor = "#222";
                     videoContainer.style.borderRadius = "8px";
                     videoContainer.style.overflow = "hidden";
-                    videoContainer.style.marginTop = "10px";
                     
                     const video = document.createElement("video");
                     video.style.width = "100%";
@@ -259,128 +378,55 @@ app.registerExtension({
                         element: videoContainer,
                         serialize: false
                     });
-                    
-                    return result;
                 } catch (error) {
                     console.error("Error in TrellisVideoPlayerNode creation:", error);
                 }
             };
 
             // Handle video updates
-            const originalExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
-                debug("TrellisVideoPlayerNode executed with message:", message);
+                debug("Video player onExecuted called with:", message);
+                
                 try {
-                    if (message?.ui?.video_path) {
-                        const videoPath = message.ui.video_path;
-                        debug("Raw video path:", videoPath);
-                        
-                        const videoId = getFileId(videoPath);
-                        if (videoId && this.videoElement) {
-                            const viewerPath = `/trellis/view-video/${videoId}`;
-                            debug("Loading video from:", viewerPath);
-                            
-                            this.videoElement.src = viewerPath;
-                            this.videoElement.load();
-                            
-                            this.videoElement.onerror = () => {
-                                debug("Error loading video, trying media path fallback");
-                                const mediaPath = api.getMediaPath(videoPath);
-                                this.videoElement.src = mediaPath;
-                                this.videoElement.load();
-                            };
-                        } else {
-                            debug("Could not extract video ID from path:", videoPath);
-                        }
+                    // Extract video path
+                    let videoPath;
+                    if (message?.video_path) {
+                        videoPath = Array.isArray(message.video_path) 
+                            ? message.video_path.join('') 
+                            : message.video_path;
+                    } else if (message?.ui?.video_path) {
+                        videoPath = Array.isArray(message.ui.video_path)
+                            ? message.ui.video_path.join('')
+                            : message.ui.video_path;
                     }
+
+                    debug("Raw video path:", videoPath);
                     
-                    if (originalExecuted) {
-                        return originalExecuted.apply(this, arguments);
+                    if (videoPath && this.videoElement) {
+                        // Extract video ID
+                        let videoId = videoPath;
+                        if (videoPath.includes('trellis_downloads/')) {
+                            const match = videoPath.match(/trellis_downloads\/([^\/]+)/);
+                            if (match) {
+                                videoId = match[1].replace('_output.mp4', '');
+                            }
+                        } else if (videoPath.includes('_output.mp4')) {
+                            videoId = videoPath.split('_output.mp4')[0];
+                        }
+                        
+                        // Use the proper endpoint
+                        const mediaPath = `/trellis/view-video/${videoId}`;
+                        debug("Loading video from:", mediaPath);
+                        
+                        this.videoElement.src = mediaPath;
+                        this.videoElement.load();
                     }
                 } catch (error) {
-                    console.error("Error in video node execution:", error);
+                    debug("Error in video player execution:", error);
                 }
             };
         }
     }
 });
-
-// Helper function for model loading
-function loadModelIntoScene(gltf, node) {
-    const model = gltf.scene;
-    
-    // Clear existing model
-    while(node.threeScene.children.length > 0){ 
-        node.threeScene.remove(node.threeScene.children[0]); 
-    }
-    
-    // Center and scale model
-    const box = new THREE.Box3().setFromObject(model);
-    const center = box.getCenter(new THREE.Vector3());
-    const size = box.getSize(new THREE.Vector3());
-    
-    const maxDim = Math.max(size.x, size.y, size.z);
-    const scale = 2 / maxDim;
-    model.scale.setScalar(scale);
-    
-    model.position.sub(center.multiplyScalar(scale));
-    
-    node.threeScene.add(model);
-}
-
-// Helper function to ensure we have a string path
-function ensurePath(pathData) {
-    if (!pathData) return null;
-    
-    // If it's a string, use it directly
-    if (typeof pathData === 'string') return pathData;
-    
-    // If it's an array, join it
-    if (Array.isArray(pathData)) {
-        const joined = pathData.join('');
-        debug("Joined array path:", joined);
-        return joined;
-    }
-    
-    // If it's an object with a path property
-    if (typeof pathData === 'object') {
-        if (pathData.path) return pathData.path;
-        if (pathData.filepath) return pathData.filepath;
-        if (pathData.file) return pathData.file;
-    }
-    
-    // Last resort, convert to string
-    return String(pathData);
-}
-
-// Add this helper function to check file accessibility
-async function checkMediaPath(path) {
-    const mediaPath = api.getMediaPath(path);
-    debug("Checking media path:", {
-        original: path,
-        mediaPath: mediaPath,
-        fullUrl: new URL(mediaPath, window.location.origin).href
-    });
-    
-    try {
-        const response = await fetch(mediaPath, { method: 'HEAD' });
-        debug("Media path check result:", {
-            status: response.status,
-            ok: response.ok,
-            contentType: response.headers.get('content-type')
-        });
-        return response.ok;
-    } catch (error) {
-        debug("Error checking media path:", error);
-        return false;
-    }
-}
-
-// Helper function to get file ID from path
-function getFileId(path) {
-    // Extract ID from paths like "trellis_downloads/f5348b34-02fc-41d3-b46c-dab8ce3517b7_output.mp4"
-    const match = path.match(/([a-f0-9-]+)_output\.[^.]+$/);
-    return match ? match[1] : null;
-}
 
 console.log("Trellis extension registered");
