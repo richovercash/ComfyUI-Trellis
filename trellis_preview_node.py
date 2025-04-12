@@ -4,6 +4,7 @@ import hashlib
 import logging
 from server import PromptServer
 from aiohttp import web
+from pathlib import Path
 
 logger = logging.getLogger('TrellisPreview')
 
@@ -85,25 +86,52 @@ class TrellisModelViewerNode:
     FUNCTION = "preview_file"
     CATEGORY = "Trellis"
     OUTPUT_NODE = True
-    
-    # def create_viewer(self, glb_path, ...): # Add this line     
+
+    def UI(cls, glb_path):
+        # Convert string path to Path object for safer handling
+        path = Path(glb_path)
+        
+        # Log the path for debugging
+        print(f"=== ModelNode - Output ===")
+        print(json.dumps({
+            "ui": {
+                "model_path": str(path)
+            },
+            "result": [str(path)]
+        }, indent=2))
+        
+        return {
+            "ui": {
+                "model_path": str(path)
+            },
+            "result": [str(path)]
+        }
+        
     def create_viewer(self, glb_path, background_color="#222222", display_width=800, 
                     display_height=600, auto_rotate="enabled", camera_distance=2.0):
         try:
-            glb_path = Path(glb_path)  # Convert to Path object
-            if not glb_path or not glb_path.exists():
-                logger.error(f"GLB file not found: {glb_path}")
-                return self.create_error_html("Model file not found or invalid path"), ""
+            # Convert to Path object
+            glb_path = Path(glb_path)
+            
+            # First try the path as-is
+            if not glb_path.exists():
+                # If it doesn't exist, try treating it as relative to COMFY_DIR
+                from comfy.paths_internal import models_dir
+                comfy_dir = Path(models_dir).parent
+                alt_path = comfy_dir / glb_path
+                
+                if alt_path.exists():
+                    glb_path = alt_path
+                else:
+                    logger.error(f"GLB file not found at either: {glb_path} or {alt_path}")
+                    return self.create_error_html("Model file not found or invalid path"), ""
             
             # Create a unique viewer filename
             viewer_dir = Path("trellis_files") / "viewers"
             viewer_dir.mkdir(parents=True, exist_ok=True)
             
-            viewer_filename = f"view_{glb_path.name.replace('.glb', '')}.html"
+            viewer_filename = f"view_{glb_path.name.replace('_output.glb', '')}.html"
             viewer_path = viewer_dir / viewer_filename
-            
-            # Get relative path to model file
-            relative_model_path = glb_path.relative_to(viewer_path.parent)
         
                     # Configure viewer settings
             auto_rotate_value = "true" if auto_rotate == "enabled" else "false"
@@ -208,8 +236,7 @@ async def get_preview_file(request):
     elif file_info["type"] == "video":
         content_type = "video/mp4"
     
-    # Serve the file
-    return web.FileResponse(file_path, headers={"Content-Type": content_type})
+
 
 # Register nodes
 NODE_CLASS_MAPPINGS = {

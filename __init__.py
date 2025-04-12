@@ -63,6 +63,10 @@ WEB_DIRECTORY = BASE_DIR / "web"
 # Use both directories for media paths
 MEDIA_DIRS = [DOWNLOAD_DIR, COMFY_DOWNLOAD_DIR]
 
+WEB_DEPENDENCIES = [
+    "js/trellis-viewer.js"  # Only this JavaScript file
+]
+
 # Define all required directories
 directories = [
     DOWNLOAD_DIR,
@@ -77,6 +81,7 @@ directories = [
 
 # Create directories if they don't exist
 for directory in directories:
+
     directory.mkdir(parents=True, exist_ok=True)
 
 # Configure file serving - include both paths
@@ -88,9 +93,8 @@ NODE_DISPLAY_NAME_MAPPINGS = {}
 
 # Dictionary of node modules to import
 node_modules = {
-    'nodes.trellis_media_nodes': 'media viewer nodes',
-    'nodes.trellis_3d_nodes': '3D model loader and viewer nodes',
-    'comfyui_trellis_node': 'basic Trellis WebSocket node',
+    'nodes.trellis_media_nodes': 'media and 3D viewer nodes',
+    'comfyui_trellis_node': 'basic Trellis WebSocket node'
 }
 
 # Import all node modules
@@ -125,11 +129,8 @@ print("=" * 80)
 
 logger.info(f"ComfyUI-Trellis loaded with {len(NODE_CLASS_MAPPINGS)} nodes")
 
-WEB_DIRECTORY = BASE_DIR / "web"
-# Add JavaScript dependencies
-WEB_DEPENDENCIES = [
-    "js/trellis-viewer.js"  # Only this JavaScript file
-]
+
+
 
 # Make sure files are loaded in correct order
 def get_web_files():
