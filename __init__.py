@@ -209,16 +209,32 @@ def setup_web_endpoints():
             logger.debug(f"Video viewer requested for: {video_id}")
             
             # Look for video file with this ID
+            found = False
             for media_dir in MEDIA_DIRS:
                 for ext in ['.mp4', '.webm', '.mov']:
                     video_path = media_dir / f"{video_id}_output{ext}"
+                    logger.debug(f"Searching for video at: {video_path} (exists: {video_path.exists()})")
+                    
                     if video_path.exists():
-                        logger.debug(f"Found video at: {video_path}")
-                        return web.FileResponse(video_path)
+                        logger.debug(f"Found video at: {video_path}, size: {video_path.stat().st_size}")
+                        found = True
+                        # Set appropriate content type based on extension
+                        content_types = {
+                            '.mp4': 'video/mp4',
+                            '.webm': 'video/webm',
+                            '.mov': 'video/quicktime'
+                        }
+                        content_type = content_types.get(ext, 'application/octet-stream')
+                        return web.FileResponse(video_path, headers={"Content-Type": content_type})
             
-            # If no video found, return 404
-            logger.warning(f"No video found for ID: {video_id}")
-            return web.Response(status=404, text="Video not found")
+            # If no video found, return 404 with JSON error
+            if not found:
+                logger.warning(f"No video found for ID: {video_id}")
+                # Log what directories were searched
+                logger.warning(f"Searched in: {[str(d) for d in MEDIA_DIRS]}")
+                
+                return web.Response(status=404, content_type="application/json", 
+                                text='{"error": "Video not found"}')
 
         @server.routes.get("/trellis/view-model/{model_id}")
         async def view_model(request):
@@ -226,16 +242,34 @@ def setup_web_endpoints():
             logger.debug(f"Model viewer requested for: {model_id}")
             
             # Look for model file with this ID
+            found = False
             for media_dir in MEDIA_DIRS:
                 for ext in ['.glb', '.gltf']:
-                    model_path = media_dir / f"{model_id}_output{ext}"
-                    if model_path.exists():
-                        logger.debug(f"Found model at: {model_path}")
-                        return web.FileResponse(model_path)
+                    search_path = f"{model_id}_output{ext}"
+                    full_path = media_dir / search_path
+                    logger.debug(f"Searching for model at: {full_path} (exists: {full_path.exists()})")
+                    
+                    if full_path.exists():
+                        logger.debug(f"Found model at: {full_path}, size: {full_path.stat().st_size}, sending as application/octet-stream")
+                        found = True
+                        # Explicitly set content type based on extension
+                        content_type = "model/gltf-binary" if ext == ".glb" else "model/gltf+json"
+                        return web.FileResponse(full_path, headers={"Content-Type": content_type})
             
-            # If no model found, return 404
-            logger.warning(f"No model found for ID: {model_id}")
-            return web.Response(status=404, text="Model not found")
+            # If no model found, log more details and return 404
+            if not found:
+                logger.warning(f"No model found for ID: {model_id}")
+                # Log what directories were searched
+                logger.warning(f"Searched in: {[str(d) for d in MEDIA_DIRS]}")
+                # List available files in those directories that match similar pattern
+                for media_dir in MEDIA_DIRS:
+                    if media_dir.exists():
+                        logger.debug(f"Files in {media_dir}:")
+                        for file in media_dir.glob("*"):
+                            logger.debug(f"  - {file.name}")
+                
+                return web.Response(status=404, content_type="application/json", 
+                                text='{"error": "Model not found"}')
 
         logger.info("Trellis web endpoints registered successfully")
     except ImportError:
