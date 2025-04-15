@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trellis Media Viewer</title>
+    <style>
+        body { 
+            margin: 0; 
+            padding: 20px; 
+            background-color: #222;
+            font-family: Arial, sans-serif;
+            color: white;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .viewers {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+        }
+        
+        .viewer-section {
+            flex: 1;
+            min-width: 400px;
+            background-color: #333;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+        }
+        
+        h2 {
+            margin-top: 0;
+            border-bottom: 1px solid #555;
+            padding-bottom: 10px;
+        }
+        
+        .input-group {
+            display: flex;
+            margin-bottom: 15px;
+        }
+        
+        input {
+            flex: 1;
+            padding: 8px;
+            border-radius: 4px 0 0 4px;
+            border: 1px solid #555;
+            background-color: #444;
+            color: white;
+        }
+        
+        button {
+            padding: 8px 15px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 0 4px 4px 0;
+            cursor: pointer;
+        }
+        
+        .display-area {
+            height: 400px;
+            background-color: #111;
+            border-radius: 4px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        #model-container {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .status {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background-color: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        
+        .error {
+            color: #ff6b6b;
+        }
+        
+        .sample-id {
+            font-family: monospace;
+            background-color: #444;
+            padding: 3px 6px;
+            border-radius: 3px;
+            cursor: pointer;
+            display: inline-block;
+            margin: 3px;
+        }
+        
+        .sample-id:hover {
+            background-color: #555;
+        }
+        
+        .hint {
+            font-size: 12px;
+            opacity: 0.7;
+            margin-top: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Trellis Media Viewer</h1>
+        
+        <div class="viewers">
+            <div class="viewer-section">
+                <h2>Video Viewer</h2>
+                <div class="input-group">
+                    <input type="text" id="video-id" placeholder="Enter video ID or path">
+                    <button id="load-video">Load</button>
+                </div>
+                
+                <div class="display-area">
+                    <video id="video-player" controls>
+                        <source id="video-source" src="" type="video/mp4">
+                        Your browser does not support the video tag.
+                    </video>
+                    <div id="video-status" class="status">Enter a video ID to load</div>
+                </div>
+                
+                <div class="hint">
+                    <strong>Examples:</strong> 
+                    <span class="sample-id" data-type="video">f84cc907-033f-4540-b9f2-d98d47004eca</span>
+                    <span class="sample-id" data-type="video">trellis_downloads/7f8e96d9-bb0c-411b-8274-4d91d54b3c56_output.mp4</span>
+                </div>
+            </div>
+            
+            <div class="viewer-section">
+                <h2>3D Model Viewer</h2>
+                <div class="input-group">
+                    <input type="text" id="model-id" placeholder="Enter model ID or path">
+                    <button id="load-model">Load</button>
+                </div>
+                
+                <div class="display-area">
+                    <div id="model-container"></div>
+                    <div id="model-status" class="status">Enter a model ID to load</div>
+                </div>
+                
+                <div class="hint">
+                    <strong>Examples:</strong> 
+                    <span class="sample-id" data-type="model">f84cc907-033f-4540-b9f2-d98d47004eca</span>
+                    <span class="sample-id" data-type="model">trellis_downloads/7f8e96d9-bb0c-411b-8274-4d91d54b3c56_output.glb</span>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Load Three.js libraries -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r132/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/controls/OrbitControls.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.min.js"></script>
+    
+    <script>
+        // DOM elements
+        const videoIdInput = document.getElementById('video-id');
+        const loadVideoBtn = document.getElementById('load-video');
+        const videoPlayer = document.getElementById('video-player');
+        const videoSource = document.getElementById('video-source');
+        const videoStatus = document.getElementById('video-status');
+        
+        const modelIdInput = document.getElementById('model-id');
+        const loadModelBtn = document.getElementById('load-model');
+        const modelContainer = document.getElementById('model-container');
+        const modelStatus = document.getElementById('model-status');
+        
+        // Three.js variables
+        let scene, camera, renderer, controls, currentModel;
+        
+        // Initialize 3D scene
+        function initModelViewer() {
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x222222);
+            
+            // Setup camera
+            camera = new THREE.PerspectiveCamera(45, modelContainer.clientWidth / modelContainer.clientHeight, 0.1, 1000);
+            camera.position.set(0, 1, 3);
+            
+            // Setup renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(modelContainer.clientWidth, modelContainer.clientHeight);
+            modelContainer.appendChild(renderer.domElement);
+            
+            // Setup controls
+            controls = new THREE.OrbitControls(camera, renderer.domElement);
+            controls.enableDamping = true;
+            controls.dampingFactor = 0.05;
+            
+            // Add lights
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(1, 2, 3);
+            scene.add(directionalLight);
+            
+            // Add a test cube
+            const geometry = new THREE.BoxGeometry(1, 1, 1);
+            const material = new THREE.MeshStandardMaterial({ 
+                color: 0x00a0ff,
+                metalness: 0.3,
+                roughness: 0.4
+            });
+            const cube = new THREE.Mesh(geometry, material);
+            scene.add(cube);
+            currentModel = cube;
+            
+            // Handle window resize
+            window.addEventListener('resize', updateModelViewerSize);
+            
+            // Animation loop
+            function animate() {
+                requestAnimationFrame(animate);
+                
+                if (currentModel === cube) {
+                    cube.rotation.x += 0.01;
+                    cube.rotation.y += 0.01;
+                }
+                
+                controls.update();
+                renderer.render(scene, camera);
+            }
+            animate();
+            
+            modelStatus.textContent = "3D viewer ready. Enter a model ID to load.";
+            setTimeout(() => {
+                if (modelStatus.textContent === "3D viewer ready. Enter a model ID to load.") {
+                    modelStatus.style.opacity = "0.5";
+                }
+            }, 3000);
+        }
+        
+        // Update 3D viewer size
+        function updateModelViewerSize() {
+            if (!camera || !renderer) return;
+            
+            const width = modelContainer.clientWidth;
+            const height = modelContainer.clientHeight;
+            
+            camera.aspect = width / height;
+            camera.updateProjectionMatrix();
+            renderer.setSize(width, height);
+        }
+        
+        // Extract ID from path
+        function extractId(input, type) {
+            // If it's a UUID pattern
+            const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+            const match = input.match(uuidPattern);
+            
+            if (match) {
+                return match[1];
+            }
+            
+            // If it's a filename pattern
+            const extension = type === 'video' ? '(mp4|webm|mov)' : '(glb|gltf)';
+            const filenamePattern = new RegExp(`([^\\/]+)_output\\.${extension}$`, 'i');
+            const filenameMatch = input.match(filenamePattern);
+            
+            if (filenameMatch) {
+                return filenameMatch[1];
+            }
+            
+            // Otherwise return as is
+            return input;
+        }
+        
+        // Load video
+        function loadVideo(videoIdOrPath) {
+            // Reset player
+            videoPlayer.pause();
+            videoPlayer.removeAttribute('src');
+            videoSource.removeAttribute('src');
+            videoPlayer.load();
+            
+            // Extract ID and build URL
+            const videoId = extractId(videoIdOrPath, 'video');
+            const videoUrl = `http://127.0.0.1:8188/trellis/video/${videoId}`;
+            
+            console.log(`Loading video: ${videoId}`);
+            console.log(`Video URL: ${videoUrl}`);
+            
+            // Update status
+            videoStatus.textContent = "Loading video...";
+            videoStatus.style.opacity = "1";
+            videoStatus.className = "status"; // Remove error class if present
+            
+            // Set source and load
+            videoSource.src = videoUrl;
+            videoPlayer.load();
+            
+            // Handle events
+            videoPlayer.oncanplay = function() {
+                videoStatus.textContent = "Video loaded successfully";
+                setTimeout(() => {
+                    videoStatus.style.opacity = "0.5";
+                }, 3000);
+            };
+            
+            videoPlayer.onerror = function() {
+                videoStatus.textContent = `Error: ${videoPlayer.error?.message || "Failed to load video"}`;
+                videoStatus.className = "status error";
+            };
+        }
+        
+        // Load 3D model
+        function loadModel(modelIdOrPath) {
+            // Extract ID and build URL
+            const modelId = extractId(modelIdOrPath, 'model');
+            const modelUrl = `http://127.0.0.1:8188/trellis/model/${modelId}`;
+            
+            console.log(`Loading model: ${modelId}`);
+            console.log(`Model URL: ${modelUrl}`);
+            
+            // Update status
+            modelStatus.textContent = "Loading model...";
+            modelStatus.style.opacity = "1";
+            modelStatus.className = "status"; // Remove error class if present
+            
+            // Clear previous models except lights
+            const lights = [];
+            scene.traverse(child => {
+                if (child instanceof THREE.Light) {
+                    lights.push(child);
+                }
+            });
+            
+            scene.clear();
+            lights.forEach(light => scene.add(light));
+            
+            // Load new model
+            const loader = new THREE.GLTFLoader();
+            loader.load(
+                modelUrl,
+                function(gltf) {
+                    currentModel = gltf.scene;
+                    
+                    console.log('Model loaded successfully');
+                    console.log('Model scene children count:', currentModel.children.length);
+                    
+                    // Center and scale the model
+                    const box = new THREE.Box3().setFromObject(currentModel);
+                    const center = box.getCenter(new THREE.Vector3());
+                    const size = box.getSize(new THREE.Vector3());
+                    
+                    const maxDim = Math.max(size.x, size.y, size.z);
+                    if (maxDim > 0) {
+                        const scale = 2.0 / maxDim;
+                        currentModel.scale.set(scale, scale, scale);
+                        currentModel.position.x = -center.x * scale;
+                        currentModel.position.y = -center.y * scale;
+                        currentModel.position.z = -center.z * scale;
+                    }
+                    
+                    scene.add(currentModel);
+                    
+                    // Reset camera
+                    camera.position.set(0, 1, 3);
+                    controls.target.set(0, 0, 0);
+                    controls.update();
+                    
+                    // Update status
+                    modelStatus.textContent = "Model loaded successfully";
+                    setTimeout(() => {
+                        modelStatus.style.opacity = "0.5";
+                    }, 3000);
+                },
+                function(xhr) {
+                    const percent = Math.round((xhr.loaded / xhr.total) * 100);
+                    modelStatus.textContent = `Loading: ${percent}%`;
+                },
+                function(error) {
+                    console.error('Error loading model:', error);
+                    modelStatus.textContent = `Error: ${error.message}`;
+                    modelStatus.className = "status error";
+                    
+                    // Create a test cube to show something
+                    const geometry = new THREE.BoxGeometry(1, 1, 1);
+                    const material = new THREE.MeshStandardMaterial({ 
+                        color: 0xff0000,
+                        metalness: 0.3,
+                        roughness: 0.4
+                    });
+                    const cube = new THREE.Mesh(geometry, material);
+                    scene.add(cube);
+                    currentModel = cube;
+                }
+            );
+        }
+        
+        // Event Listeners
+        loadVideoBtn.addEventListener('click', () => {
+            const videoIdOrPath = videoIdInput.value.trim();
+            if (!videoIdOrPath) {
+                videoStatus.textContent = "Please enter a video ID or path";
+                videoStatus.className = "status error";
+                return;
+            }
+            loadVideo(videoIdOrPath);
+        });
+        
+        loadModelBtn.addEventListener('click', () => {
+            const modelIdOrPath = modelIdInput.value.trim();
+            if (!modelIdOrPath) {
+                modelStatus.textContent = "Please enter a model ID or path";
+                modelStatus.className = "status error";
+                return;
+            }
+            loadModel(modelIdOrPath);
+        });
+        
+        // Allow pressing Enter in the input fields
+        videoIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadVideoBtn.click();
+        });
+        
+        modelIdInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') loadModelBtn.click();
+        });
+        
+        // Sample IDs click handlers
+        document.querySelectorAll('.sample-id').forEach(element => {
+            element.addEventListener('click', () => {
+                const type = element.getAttribute('data-type');
+                const value = element.textContent;
+                
+                if (type === 'video') {
+                    videoIdInput.value = value;
+                    loadVideoBtn.click();
+                } else if (type === 'model') {
+                    modelIdInput.value = value;
+                    loadModelBtn.click();
+                }
+            });
+        });
+        
+        // Initialize the model viewer
+        initModelViewer();
+        
+        // Check for URL parameters
+        const urlParams = new URLSearchParams(window.location.search);
+        const videoIdParam = urlParams.get('video_id');
+        const modelIdParam = urlParams.get('model_id');
+        
+        if (videoIdParam) {
+            videoIdInput.value = videoIdParam;
+            loadVideo(videoIdParam);
+        }
+        
+        if (modelIdParam) {
+            modelIdInput.value = modelIdParam;
+            loadModel(modelIdParam);
+        }
+    </script>
+</body>
+</html>

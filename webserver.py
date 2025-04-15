@@ -15,7 +15,16 @@ async def get_trellis_model(request):
     if not os.path.exists(model_path):
         return web.Response(status=404, text=f"Model {model_id} not found")
     
-    return web.FileResponse(model_path)
+        # Return with correct MIME type and CORS headers
+    return web.FileResponse(
+        model_path,
+        headers={
+            "Content-Type": "model/gltf-binary",
+            "Access-Control-Allow-Origin": "*",  # Allow access from any origin
+            "Access-Control-Allow-Methods": "GET",
+            "Access-Control-Allow-Headers": "Content-Type"
+        }
+    )
 
 @server.PromptServer.instance.routes.get("/trellis/video/{video_id}")
 async def get_trellis_video(request):
