@@ -13,3 +13,9 @@ build/
 venv/
 env/
 ENV/
+
+
+# folders
+not_using/
+utility_scripts/
+debug_logs/
