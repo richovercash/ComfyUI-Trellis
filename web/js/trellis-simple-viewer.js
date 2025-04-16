@@ -1,4 +1,4 @@
-// trellis-simple-viewer.js - Clean implementation with proper execution handling
+// trellis-simple-viewer.js - Clean implementation with improved path handling and error feedback
 
 import { app } from "/scripts/app.js";
 
@@ -19,7 +19,7 @@ app.registerExtension({
                 this.size[1] = 280;
             };
             
-            // Function to extract ID from path - DEFINED AT CLASS LEVEL
+            // Function to extract ID from path - DEFINED AT CLASS LEVEL with improved regex
             nodeType.prototype.extractId = function(path) {
                 console.log("Extracting ID from path:", path);
                 
@@ -29,7 +29,7 @@ app.registerExtension({
                 }
                 
                 // Convert to string if needed
-                path = String(path);
+                path = String(path).trim();
                 
                 // Try UUID pattern
                 const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
@@ -40,11 +40,15 @@ app.registerExtension({
                     return match[1];
                 }
                 
-                // Try filename pattern
-                const filenameMatch = path.match(/([^\/]+)_output\.(glb|gltf)$/);
+                // Try filename pattern with more flexible matching
+                const filenameMatch = path.match(/([^\/\\]+?)(?:_output)?(?:\.glb|\.gltf)?$/i);
                 if (filenameMatch) {
-                    console.log("Found filename ID:", filenameMatch[1]);
-                    return filenameMatch[1];
+                    const filename = filenameMatch[1];
+                    // Make sure we don't have just a file extension
+                    if (filename && !filename.startsWith('.')) {
+                        console.log("Found filename ID:", filename);
+                        return filename;
+                    }
                 }
                 
                 // Just return the path
@@ -52,12 +56,16 @@ app.registerExtension({
                 return path;
             };
             
-            // Function to load model - DEFINED AT CLASS LEVEL
+            // Function to load model - DEFINED AT CLASS LEVEL with better error handling
             nodeType.prototype.loadModel = function(modelId) {
                 console.log("Loading model:", modelId);
                 
                 if (!modelId || !this.iframe) {
                     console.log("Cannot load model - missing ID or iframe");
+                    if (this.statusElement) {
+                        this.statusElement.textContent = "Error: Cannot load model - missing ID or iframe";
+                        this.statusElement.style.color = "red";
+                    }
                     return;
                 }
                 
@@ -66,15 +74,21 @@ app.registerExtension({
                 // Update status
                 if (this.statusElement) {
                     this.statusElement.textContent = "Loading model...";
+                    this.statusElement.style.color = "white";
                 }
                 
-                // Set iframe source
-                const viewerUrl = `/trellis/simple-viewer/model/${modelId}`;
+                // Set iframe source with cache busting for better reloading
+                const timestamp = Date.now();
+                const viewerUrl = `/trellis/simple-viewer/model/${modelId}?cache=${timestamp}`;
                 console.log("Setting model iframe src to:", viewerUrl);
                 this.iframe.src = viewerUrl;
             };
             
-            // Create node UI elements
+
+
+
+
+                        // Create node UI elements with proper widget reference storage
             nodeType.prototype.onNodeCreated = function() {
                 console.log("Creating Trellis Model Viewer Node");
                 
@@ -83,27 +97,25 @@ app.registerExtension({
                 container.style.width = "100%";
                 container.style.height = "250px";
                 container.style.position = "relative";
-                container.style.backgroundColor = "#333";
+                container.style.backgroundColor = "#222";
                 container.style.borderRadius = "8px";
                 container.style.overflow = "hidden";
-                
-                console.log("Created model container");
                 
                 // Add status display
                 const status = document.createElement("div");
                 status.style.position = "absolute";
                 status.style.top = "10px";
                 status.style.left = "10px";
+                status.style.right = "10px";
+                status.style.textAlign = "center";
                 status.style.color = "white";
-                status.style.background = "rgba(0,0,0,0.5)";
+                status.style.background = "rgba(0,0,0,0.7)";
                 status.style.padding = "5px";
                 status.style.borderRadius = "4px";
                 status.style.zIndex = "10";
                 status.textContent = "No model loaded";
                 container.appendChild(status);
                 this.statusElement = status;
-                
-                console.log("Added model status element");
                 
                 // Create iframe
                 const iframe = document.createElement("iframe");
@@ -114,35 +126,69 @@ app.registerExtension({
                 container.appendChild(iframe);
                 this.iframe = iframe;
                 
-                console.log("Added model iframe");
-                
-                // Add test model viewer
-                const testId = "cbecf79b-beee-469e-81fe-0ff63d966d4b";
-                iframe.src = `/trellis/simple-viewer/model/${testId}`;
-                console.log(`Test model URL: /trellis/simple-viewer/model/${testId}`);
+                // Store it directly on the node's properties
+                this.properties = this.properties || {};
+                this.properties.model_id = "";
                 
                 // Add widget to node
                 this.addWidget("preview", "model_preview", "", null, {
                     element: container
                 });
                 
-                // Add test button
-                const self = this; // Save reference to this
-                this.addWidget("button", "test_load", "Test Load", function() {
-                    console.log("Model test button clicked");
-                    self.loadModel("cbecf79b-beee-469e-81fe-0ff63d966d4b");
+                // Add text input widget with direct property binding
+                this.addWidget("text", "model_id", "Model ID", this.properties.model_id, (value) => {
+                    console.log("Model ID changed to:", value);
+                    this.properties.model_id = value; // Store in properties
                 });
                 
-                // Add refresh button
-                this.addWidget("button", "refresh", "Refresh", function() {
-                    console.log("Model refresh button clicked");
-                    if (self.lastModelId) {
-                        self.loadModel(self.lastModelId);
+                // Add load button
+                const node = this; // Store reference to node
+                this.addWidget("button", "load_model", "Load Model", function() {
+                    console.log("Model load button clicked");
+                    // Access value from properties
+                    const modelId = node.properties.model_id;
+                    console.log("Using model ID:", modelId || "<empty>");
+                    
+                    if (!modelId || modelId.trim() === "") {
+                        if (node.statusElement) {
+                            node.statusElement.textContent = "Error: Please enter a model ID";
+                            node.statusElement.style.color = "red";
+                        }
+                        return;
+                    }
+                    
+                    if (typeof node.loadModel === 'function') {
+                        node.loadModel(modelId.trim());
+                    } else {
+                        console.error("loadModel function not available");
                     }
                 });
-            };
+                
+                // Similar pattern for the refresh button
+                this.addWidget("button", "refresh", "Refresh", function() {
+                    console.log("Refresh button clicked");
+                    
+                    // Access lastModelId or model_id property
+                    const modelId = node.lastModelId || node.properties.model_id;
+                    console.log("Using cached/property model ID:", modelId || "<empty>");
+                    
+                    if (!modelId || modelId.trim() === "") {
+                        if (node.statusElement) {
+                            node.statusElement.textContent = "Error: No model to refresh";
+                            node.statusElement.style.color = "red";
+                        }
+                        return;
+                    }
+                    
+                    if (typeof node.loadModel === 'function') {
+                        node.loadModel(modelId.trim());
+                    } else {
+                        console.error("loadModel function not available");
+                    }
+                });
+            }
             
-            // Handle execution
+            // Handle execution with improved path extraction and error handling
             const originalOnExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
                 console.log("🔴 Model viewer onExecuted called with:", message);
@@ -176,8 +222,17 @@ app.registerExtension({
                     }
                     
                     if (!modelPath) {
+                        if (this.statusElement) {
+                            this.statusElement.textContent = "Error: No model path found in execution message";
+                            this.statusElement.style.color = "red";
+                        }
                         console.log("No model path found in execution message");
                         return;
+                    }
+                    
+                    // Update the model ID input to match current model
+                    if (this.modelIdInput) {
+                        this.modelIdInput.value = modelPath;
                     }
                     
                     // Extract ID and load model
@@ -186,6 +241,11 @@ app.registerExtension({
                     
                     if (modelId) {
                         this.loadModel(modelId);
+                    } else {
+                        if (this.statusElement) {
+                            this.statusElement.textContent = "Error: Could not extract valid model ID";
+                            this.statusElement.style.color = "red";
+                        }
                     }
                     
                 } catch (error) {
@@ -198,7 +258,7 @@ app.registerExtension({
             };
         }
         
-        // Video Player Node - Similar structure to Model Viewer
+        // Video Player Node - Similar improved structure
         if (nodeData.name === "TrellisVideoPlayerNode") {
             console.log("Registering Trellis Video Player Node");
             
@@ -211,7 +271,7 @@ app.registerExtension({
                 this.size[1] = 280;
             };
             
-            // Function to extract ID from path - DEFINED AT CLASS LEVEL
+            // Function to extract ID from path - DEFINED AT CLASS LEVEL with improved regex
             nodeType.prototype.extractId = function(path) {
                 console.log("Extracting ID from video path:", path);
                 
@@ -221,7 +281,7 @@ app.registerExtension({
                 }
                 
                 // Convert to string if needed
-                path = String(path);
+                path = String(path).trim();
                 
                 // Try UUID pattern
                 const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
@@ -232,11 +292,15 @@ app.registerExtension({
                     return match[1];
                 }
                 
-                // Try filename pattern
-                const filenameMatch = path.match(/([^\/]+)_output\.(mp4|webm|mov)$/);
+                // Try filename pattern with more flexible matching
+                const filenameMatch = path.match(/([^\/\\]+?)(?:_output)?(?:\.mp4|\.webm|\.mov)?$/i);
                 if (filenameMatch) {
-                    console.log("Found video filename ID:", filenameMatch[1]);
-                    return filenameMatch[1];
+                    const filename = filenameMatch[1];
+                    // Make sure we don't have just a file extension
+                    if (filename && !filename.startsWith('.')) {
+                        console.log("Found video filename ID:", filename);
+                        return filename;
+                    }
                 }
                 
                 // Just return the path
@@ -244,12 +308,16 @@ app.registerExtension({
                 return path;
             };
             
-            // Function to load video - DEFINED AT CLASS LEVEL
+            // Function to load video - DEFINED AT CLASS LEVEL with better error handling
             nodeType.prototype.loadVideo = function(videoId) {
                 console.log("Loading video:", videoId);
                 
                 if (!videoId || !this.iframe) {
                     console.log("Cannot load video - missing ID or iframe");
+                    if (this.statusElement) {
+                        this.statusElement.textContent = "Error: Cannot load video - missing ID or iframe";
+                        this.statusElement.style.color = "red";
+                    }
                     return;
                 }
                 
@@ -258,39 +326,44 @@ app.registerExtension({
                 // Update status
                 if (this.statusElement) {
                     this.statusElement.textContent = "Loading video...";
+                    this.statusElement.style.color = "white";
                 }
                 
-                // Set iframe source
-                const viewerUrl = `/trellis/simple-viewer/video/${videoId}`;
+                // Set iframe source with cache busting for better reloading
+                const timestamp = Date.now();
+                const viewerUrl = `/trellis/simple-viewer/video/${videoId}?cache=${timestamp}`;
                 console.log("Setting video iframe src to:", viewerUrl);
                 this.iframe.src = viewerUrl;
             };
             
-            // Create node UI elements
+            // Create node UI elements with better error handling
             nodeType.prototype.onNodeCreated = function() {
                 console.log("Creating Trellis Video Player Node");
                 
-                // Create container
+                // Create container with improved styling
                 const container = document.createElement("div");
                 container.style.width = "100%";
                 container.style.height = "250px";
                 container.style.position = "relative";
-                container.style.backgroundColor = "#333";
+                container.style.backgroundColor = "#222";
                 container.style.borderRadius = "8px";
                 container.style.overflow = "hidden";
                 
                 console.log("Creating video container");
                 
-                // Add status display
+                // Add status display with better positioning
                 const status = document.createElement("div");
                 status.style.position = "absolute";
                 status.style.top = "10px";
                 status.style.left = "10px";
+                status.style.right = "10px";
+                status.style.textAlign = "center";
                 status.style.color = "white";
-                status.style.background = "rgba(0,0,0,0.5)";
+                status.style.background = "rgba(0,0,0,0.7)";
                 status.style.padding = "5px";
                 status.style.borderRadius = "4px";
                 status.style.zIndex = "10";
+                status.style.transition = "opacity 0.5s ease";
                 status.textContent = "No video loaded";
                 container.appendChild(status);
                 this.statusElement = status;
@@ -306,33 +379,54 @@ app.registerExtension({
                 
                 console.log("Creating video iframe");
                 
-                // Add test video viewer
-                const testId = "cbecf79b-beee-469e-81fe-0ff63d966d4b";
-                iframe.src = `/trellis/simple-viewer/video/${testId}`;
-                console.log(`Testing with hardcoded URL: /trellis/simple-viewer/video/${testId}`);
-                
                 // Add widget to node
                 this.addWidget("preview", "video_preview", "", null, {
                     element: container
                 });
                 
-                // Add test button
-                const self = this; // Save reference to this
-                this.addWidget("button", "test_load", "Test Load", function() {
-                    console.log("Video test button clicked");
-                    self.loadVideo("cbecf79b-beee-469e-81fe-0ff63d966d4b");
+                // Add video ID input widget
+                this.videoIdInput = this.addWidget("text", "video_id", "Video ID", "", {
+                    callback: (value) => {
+                        console.log("Video ID input changed:", value);
+                    }
                 });
                 
+                // Fix for button widgets - needs proper callback assignment
+                this.addWidget("button", "load_model", "Load Model", function() {
+                    console.log("Model load button clicked");
+                    const videoId = self.modelIdInput.value;
+                    // Check if the modelId input has a value property or is itself the value
+                    const videoValue = typeof videoId === 'object' && videoId !== null ? 
+                                    (videoId.value || "") : (videoId || "");
+                    
+                    if (!videoValue.trim()) {
+                        if (self.statusElement) {
+                            self.statusElement.textContent = "Error: Please enter a model ID";
+                            self.statusElement.style.color = "red";
+                        }
+                        return;
+                    }
+                    self.loadVideo(videoValue.trim());
+                });
+
+
                 // Add refresh button
                 this.addWidget("button", "refresh", "Refresh", function() {
                     console.log("Video refresh button clicked");
                     if (self.lastVideoId) {
                         self.loadVideo(self.lastVideoId);
+                    } else if (self.videoIdInput.value && self.videoIdInput.value.trim() !== "") {
+                        self.loadVideo(self.videoIdInput.value.trim());
+                    } else {
+                        if (self.statusElement) {
+                            self.statusElement.textContent = "Error: No video to refresh";
+                            self.statusElement.style.color = "red";
+                        }
                     }
                 });
             };
             
-            // Handle execution
+            // Handle execution with improved path extraction and error handling
             const originalOnExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
                 console.log("🔴 Video player onExecuted called with:", message);
@@ -366,8 +460,17 @@ app.registerExtension({
                     }
                     
                     if (!videoPath) {
+                        if (this.statusElement) {
+                            this.statusElement.textContent = "Error: No video path found in execution message";
+                            this.statusElement.style.color = "red";
+                        }
                         console.log("No video path found in execution message");
                         return;
+                    }
+                    
+                    // Update the video ID input to match current video
+                    if (this.videoIdInput) {
+                        this.videoIdInput.value = videoPath;
                     }
                     
                     // Extract ID and load video
@@ -376,6 +479,11 @@ app.registerExtension({
                     
                     if (videoId) {
                         this.loadVideo(videoId);
+                    } else {
+                        if (this.statusElement) {
+                            this.statusElement.textContent = "Error: Could not extract valid video ID";
+                            this.statusElement.style.color = "red";
+                        }
                     }
                     
                 } catch (error) {

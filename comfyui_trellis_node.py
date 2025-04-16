@@ -15,30 +15,34 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('TrellisNode')
 
 # Main Trellis Client for WebSocket communication
-import json
-import aiohttp
-import os
-import base64
-import websockets
-import asyncio
-from PIL import Image
-import io
-import numpy as np
-import tempfile
-import logging
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('TrellisNode')
-
-# Main Trellis Client for WebSocket communication
 class TrellisClientComfy:
     def __init__(self, server_url, download_dir='trellis_downloads'):
         self.server_url = server_url
         self.websocket = None
         self.connected = False
-        self.download_dir = download_dir
-        os.makedirs(self.download_dir, exist_ok=True)
+        
+        # Handle multiple possible download directories
+        self.download_dir = self._get_download_dir(download_dir)
+        logger.info(f"Using download directory: {self.download_dir}")
+
+    def _get_download_dir(self, dir_name):
+        """Get the best download directory path"""
+        # First try: specified path
+        if os.path.isabs(dir_name):
+            os.makedirs(dir_name, exist_ok=True)
+            return dir_name
+            
+        # Second try: subdirectory of current dir
+        current_dir_path = os.path.join(os.getcwd(), dir_name)
+        if os.path.exists(current_dir_path) or os.access(os.path.dirname(current_dir_path), os.W_OK):
+            os.makedirs(current_dir_path, exist_ok=True)
+            return current_dir_path
+            
+        # Third try: subdirectory of script dir
+        script_dir = os.path.dirname(os.path.realpath(__file__))
+        script_dir_path = os.path.join(script_dir, dir_name)
+        os.makedirs(script_dir_path, exist_ok=True)
+        return script_dir_path
 
     async def connect(self):
         """Connect to WebSocket server"""
@@ -189,7 +193,10 @@ class TrellisClientComfy:
                     f.write(chunk)
 
             logger.info(f"✓ Downloaded {file_type} file to {output_path}")
-            return output_path
+            
+            # Return just the ID part as a clean path for use in viewer nodes
+            session_id_clean = session_id.strip()
+            return session_id_clean
                 
         except Exception as e:
             logger.error(f"✗ Error downloading {file_type} file: {e}")
@@ -305,7 +312,8 @@ class TrellisProcessNode:
                 self._process_async(image, server_url, seed, sparse_steps, sparse_cfg_strength, 
                                   slat_steps, slat_cfg_strength, simplify, texture_size)
             )
-            logger.info(f"Downloaded GLB file to: {glb_path}")
+            logger.info(f"Downloaded GLB file path: {glb_path}")
+            logger.info(f"Downloaded Video file path: {video_path}")
             return (glb_path or "", video_path or "")
         finally:
             loop.close()
