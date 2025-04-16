@@ -578,10 +578,10 @@ async def simple_media_viewer(request):
                 document.body.appendChild(renderer.domElement);
                 
                 // Lighting
-                const ambientLight = new THREE.AmbientLight(0xffffff, 0.7);
+                const ambientLight = new THREE.AmbientLight(0xffffff, 20);
                 scene.add(ambientLight);
                 
-                const directionalLight = new THREE.DirectionalLight(0xffffff, 0.8);
+                const directionalLight = new THREE.DirectionalLight(0xffffff, 10);
                 directionalLight.position.set(1, 1, 1);
                 scene.add(directionalLight);
                 

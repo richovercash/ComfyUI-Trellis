@@ -1,4 +1,4 @@
-// trellis-simple-viewer.js - Modified for output node compatibility
+// trellis-simple-viewer.js - Clean implementation with proper execution handling
 
 import { app } from "/scripts/app.js";
 
@@ -6,24 +6,79 @@ app.registerExtension({
     name: "Trellis.SimpleMediaViewer",
     
     async beforeRegisterNodeDef(nodeType, nodeData) {
-        // Handle model viewer
+        // Model Viewer Node
         if (nodeData.name === "TrellisModelViewerNode") {
             console.log("Registering Trellis Model Viewer Node");
             
-            // Make node taller to fit content
+            // Make node taller
             const onDrawBackground = nodeType.prototype.onDrawBackground;
             nodeType.prototype.onDrawBackground = function(ctx) {
                 if (onDrawBackground) {
                     onDrawBackground.apply(this, arguments);
                 }
-                this.size[1] = 280; // Set fixed height
+                this.size[1] = 280;
             };
             
-            // Create node UI
+            // Function to extract ID from path - DEFINED AT CLASS LEVEL
+            nodeType.prototype.extractId = function(path) {
+                console.log("Extracting ID from path:", path);
+                
+                if (!path) {
+                    console.log("Path is empty");
+                    return null;
+                }
+                
+                // Convert to string if needed
+                path = String(path);
+                
+                // Try UUID pattern
+                const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+                const match = path.match(uuidPattern);
+                
+                if (match) {
+                    console.log("Found UUID:", match[1]);
+                    return match[1];
+                }
+                
+                // Try filename pattern
+                const filenameMatch = path.match(/([^\/]+)_output\.(glb|gltf)$/);
+                if (filenameMatch) {
+                    console.log("Found filename ID:", filenameMatch[1]);
+                    return filenameMatch[1];
+                }
+                
+                // Just return the path
+                console.log("Using path as ID:", path);
+                return path;
+            };
+            
+            // Function to load model - DEFINED AT CLASS LEVEL
+            nodeType.prototype.loadModel = function(modelId) {
+                console.log("Loading model:", modelId);
+                
+                if (!modelId || !this.iframe) {
+                    console.log("Cannot load model - missing ID or iframe");
+                    return;
+                }
+                
+                this.lastModelId = modelId;
+                
+                // Update status
+                if (this.statusElement) {
+                    this.statusElement.textContent = "Loading model...";
+                }
+                
+                // Set iframe source
+                const viewerUrl = `/trellis/simple-viewer/model/${modelId}`;
+                console.log("Setting model iframe src to:", viewerUrl);
+                this.iframe.src = viewerUrl;
+            };
+            
+            // Create node UI elements
             nodeType.prototype.onNodeCreated = function() {
                 console.log("Creating Trellis Model Viewer Node");
                 
-                // Create iframe container
+                // Create container
                 const container = document.createElement("div");
                 container.style.width = "100%";
                 container.style.height = "250px";
@@ -31,6 +86,8 @@ app.registerExtension({
                 container.style.backgroundColor = "#333";
                 container.style.borderRadius = "8px";
                 container.style.overflow = "hidden";
+                
+                console.log("Created model container");
                 
                 // Add status display
                 const status = document.createElement("div");
@@ -46,7 +103,9 @@ app.registerExtension({
                 container.appendChild(status);
                 this.statusElement = status;
                 
-                // Create iframe (initially empty)
+                console.log("Added model status element");
+                
+                // Create iframe
                 const iframe = document.createElement("iframe");
                 iframe.style.width = "100%";
                 iframe.style.height = "100%";
@@ -55,82 +114,91 @@ app.registerExtension({
                 container.appendChild(iframe);
                 this.iframe = iframe;
                 
+                console.log("Added model iframe");
+                
+                // Add test model viewer
+                const testId = "cbecf79b-beee-469e-81fe-0ff63d966d4b";
+                iframe.src = `/trellis/simple-viewer/model/${testId}`;
+                console.log(`Test model URL: /trellis/simple-viewer/model/${testId}`);
+                
                 // Add widget to node
                 this.addWidget("preview", "model_preview", "", null, {
                     element: container
                 });
                 
-                // Add a button to refresh the view
-                this.addWidget("button", "refresh", "Refresh", () => {
-                    if (this.lastModelId) {
-                        this.loadModel(this.lastModelId);
+                // Add test button
+                const self = this; // Save reference to this
+                this.addWidget("button", "test_load", "Test Load", function() {
+                    console.log("Model test button clicked");
+                    self.loadModel("cbecf79b-beee-469e-81fe-0ff63d966d4b");
+                });
+                
+                // Add refresh button
+                this.addWidget("button", "refresh", "Refresh", function() {
+                    console.log("Model refresh button clicked");
+                    if (self.lastModelId) {
+                        self.loadModel(self.lastModelId);
                     }
                 });
-            };
-            
-            // Add method to load models
-            nodeType.prototype.loadModel = function(modelId) {
-                if (!modelId || !this.iframe) return;
-                
-                this.lastModelId = modelId;
-                
-                // Update status
-                if (this.statusElement) {
-                    this.statusElement.textContent = "Loading model...";
-                    this.statusElement.style.opacity = "1";
-                }
-                
-                // Set iframe to our simplified viewer
-                this.iframe.src = `/trellis/simple-viewer/model/${modelId}`;
             };
             
             // Handle execution
             const originalOnExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
-                // Call original handler if exists
+                console.log("🔴 Model viewer onExecuted called with:", message);
+                
+                // Call original if it exists
                 if (originalOnExecuted) {
                     originalOnExecuted.apply(this, arguments);
                 }
                 
-                console.log("Model viewer executed:", message);
-                
                 try {
-                    // Get model path from the inputs (first item of message)
-                    let modelPath = "";
-                    if (message && message.length > 0) {
+                    // Get model path
+                    let modelPath = null;
+                    
+                    if (Array.isArray(message) && message.length > 0) {
                         modelPath = message[0];
-                    }
-                    
-                    if (!modelPath) return;
-                    
-                    // Extract ID from path
-                    const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-                    const match = modelPath.match(uuidPattern);
-                    
-                    let modelId;
-                    if (match) {
-                        modelId = match[1];
+                        console.log("Using array first element as model path:", modelPath);
+                    } else if (message?.model_path) {
+                        modelPath = message.model_path;
+                        console.log("Using message.model_path:", modelPath);
+                    } else if (message?.ui?.model_path) {
+                        modelPath = message.ui.model_path;
+                        console.log("Using message.ui.model_path:", modelPath);
+                    } else if (message?.result) {
+                        modelPath = Array.isArray(message.result) ? message.result[0] : message.result;
+                        console.log("Using message.result as model path:", modelPath);
+                    } else if (typeof message === 'string') {
+                        modelPath = message;
+                        console.log("Using message string directly as model path:", modelPath);
                     } else {
-                        const filenameMatch = modelPath.match(/([^\/]+)_output\.(glb|gltf)$/);
-                        if (filenameMatch) {
-                            modelId = filenameMatch[1];
-                        } else {
-                            modelId = modelPath;
-                        }
+                        console.log("Could not identify model path in message. Full message:", JSON.stringify(message));
                     }
                     
-                    this.loadModel(modelId);
+                    if (!modelPath) {
+                        console.log("No model path found in execution message");
+                        return;
+                    }
+                    
+                    // Extract ID and load model
+                    const modelId = this.extractId(modelPath);
+                    console.log("Extracted model ID for loading:", modelId);
+                    
+                    if (modelId) {
+                        this.loadModel(modelId);
+                    }
                     
                 } catch (error) {
-                    console.error("Error loading model:", error);
+                    console.error("Error in model viewer execution:", error);
                     if (this.statusElement) {
                         this.statusElement.textContent = `Error: ${error.message}`;
+                        this.statusElement.style.color = "red";
                     }
                 }
             };
         }
         
-        // Handle video player
+        // Video Player Node - Similar structure to Model Viewer
         if (nodeData.name === "TrellisVideoPlayerNode") {
             console.log("Registering Trellis Video Player Node");
             
@@ -140,14 +208,69 @@ app.registerExtension({
                 if (onDrawBackground) {
                     onDrawBackground.apply(this, arguments);
                 }
-                this.size[1] = 280; // Set fixed height
+                this.size[1] = 280;
             };
             
-            // Create node UI
+            // Function to extract ID from path - DEFINED AT CLASS LEVEL
+            nodeType.prototype.extractId = function(path) {
+                console.log("Extracting ID from video path:", path);
+                
+                if (!path) {
+                    console.log("Video path is empty");
+                    return null;
+                }
+                
+                // Convert to string if needed
+                path = String(path);
+                
+                // Try UUID pattern
+                const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
+                const match = path.match(uuidPattern);
+                
+                if (match) {
+                    console.log("Found video UUID:", match[1]);
+                    return match[1];
+                }
+                
+                // Try filename pattern
+                const filenameMatch = path.match(/([^\/]+)_output\.(mp4|webm|mov)$/);
+                if (filenameMatch) {
+                    console.log("Found video filename ID:", filenameMatch[1]);
+                    return filenameMatch[1];
+                }
+                
+                // Just return the path
+                console.log("Using video path as ID:", path);
+                return path;
+            };
+            
+            // Function to load video - DEFINED AT CLASS LEVEL
+            nodeType.prototype.loadVideo = function(videoId) {
+                console.log("Loading video:", videoId);
+                
+                if (!videoId || !this.iframe) {
+                    console.log("Cannot load video - missing ID or iframe");
+                    return;
+                }
+                
+                this.lastVideoId = videoId;
+                
+                // Update status
+                if (this.statusElement) {
+                    this.statusElement.textContent = "Loading video...";
+                }
+                
+                // Set iframe source
+                const viewerUrl = `/trellis/simple-viewer/video/${videoId}`;
+                console.log("Setting video iframe src to:", viewerUrl);
+                this.iframe.src = viewerUrl;
+            };
+            
+            // Create node UI elements
             nodeType.prototype.onNodeCreated = function() {
                 console.log("Creating Trellis Video Player Node");
                 
-                // Create iframe container
+                // Create container
                 const container = document.createElement("div");
                 container.style.width = "100%";
                 container.style.height = "250px";
@@ -155,6 +278,8 @@ app.registerExtension({
                 container.style.backgroundColor = "#333";
                 container.style.borderRadius = "8px";
                 container.style.overflow = "hidden";
+                
+                console.log("Creating video container");
                 
                 // Add status display
                 const status = document.createElement("div");
@@ -170,7 +295,7 @@ app.registerExtension({
                 container.appendChild(status);
                 this.statusElement = status;
                 
-                // Create iframe (initially empty)
+                // Create iframe
                 const iframe = document.createElement("iframe");
                 iframe.style.width = "100%";
                 iframe.style.height = "100%";
@@ -179,76 +304,85 @@ app.registerExtension({
                 container.appendChild(iframe);
                 this.iframe = iframe;
                 
+                console.log("Creating video iframe");
+                
+                // Add test video viewer
+                const testId = "cbecf79b-beee-469e-81fe-0ff63d966d4b";
+                iframe.src = `/trellis/simple-viewer/video/${testId}`;
+                console.log(`Testing with hardcoded URL: /trellis/simple-viewer/video/${testId}`);
+                
                 // Add widget to node
                 this.addWidget("preview", "video_preview", "", null, {
                     element: container
                 });
                 
-                // Add a button to refresh the view
-                this.addWidget("button", "refresh", "Refresh", () => {
-                    if (this.lastVideoId) {
-                        this.loadVideo(this.lastVideoId);
+                // Add test button
+                const self = this; // Save reference to this
+                this.addWidget("button", "test_load", "Test Load", function() {
+                    console.log("Video test button clicked");
+                    self.loadVideo("cbecf79b-beee-469e-81fe-0ff63d966d4b");
+                });
+                
+                // Add refresh button
+                this.addWidget("button", "refresh", "Refresh", function() {
+                    console.log("Video refresh button clicked");
+                    if (self.lastVideoId) {
+                        self.loadVideo(self.lastVideoId);
                     }
                 });
-            };
-            
-            // Add method to load videos
-            nodeType.prototype.loadVideo = function(videoId) {
-                if (!videoId || !this.iframe) return;
-                
-                this.lastVideoId = videoId;
-                
-                // Update status
-                if (this.statusElement) {
-                    this.statusElement.textContent = "Loading video...";
-                    this.statusElement.style.opacity = "1";
-                }
-                
-                // Set iframe to our simplified viewer
-                this.iframe.src = `/trellis/simple-viewer/video/${videoId}`;
             };
             
             // Handle execution
             const originalOnExecuted = nodeType.prototype.onExecuted;
             nodeType.prototype.onExecuted = function(message) {
-                // Call original handler if exists
+                console.log("🔴 Video player onExecuted called with:", message);
+                
+                // Call original if it exists
                 if (originalOnExecuted) {
                     originalOnExecuted.apply(this, arguments);
                 }
                 
-                console.log("Video player executed:", message);
-                
                 try {
-                    // Get video path from the inputs (first item of message)
-                    let videoPath = "";
-                    if (message && message.length > 0) {
+                    // Get video path
+                    let videoPath = null;
+                    
+                    if (Array.isArray(message) && message.length > 0) {
                         videoPath = message[0];
-                    }
-                    
-                    if (!videoPath) return;
-                    
-                    // Extract ID from path
-                    const uuidPattern = /([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})/i;
-                    const match = videoPath.match(uuidPattern);
-                    
-                    let videoId;
-                    if (match) {
-                        videoId = match[1];
+                        console.log("Using array first element as video path:", videoPath);
+                    } else if (message?.video_path) {
+                        videoPath = message.video_path;
+                        console.log("Using message.video_path:", videoPath);
+                    } else if (message?.ui?.video_path) {
+                        videoPath = message.ui.video_path;
+                        console.log("Using message.ui.video_path:", videoPath);
+                    } else if (message?.result) {
+                        videoPath = Array.isArray(message.result) ? message.result[0] : message.result;
+                        console.log("Using message.result as video path:", videoPath);
+                    } else if (typeof message === 'string') {
+                        videoPath = message;
+                        console.log("Using message string directly as video path:", videoPath);
                     } else {
-                        const filenameMatch = videoPath.match(/([^\/]+)_output\.(mp4|webm|mov)$/);
-                        if (filenameMatch) {
-                            videoId = filenameMatch[1];
-                        } else {
-                            videoId = videoPath;
-                        }
+                        console.log("Could not identify video path in message. Full message:", JSON.stringify(message));
                     }
                     
-                    this.loadVideo(videoId);
+                    if (!videoPath) {
+                        console.log("No video path found in execution message");
+                        return;
+                    }
+                    
+                    // Extract ID and load video
+                    const videoId = this.extractId(videoPath);
+                    console.log("Extracted video ID for loading:", videoId);
+                    
+                    if (videoId) {
+                        this.loadVideo(videoId);
+                    }
                     
                 } catch (error) {
-                    console.error("Error loading video:", error);
+                    console.error("Error in video player execution:", error);
                     if (this.statusElement) {
                         this.statusElement.textContent = `Error: ${error.message}`;
+                        this.statusElement.style.color = "red";
                     }
                 }
             };
