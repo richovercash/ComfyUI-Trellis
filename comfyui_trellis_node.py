@@ -15,30 +15,46 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(level
 logger = logging.getLogger('TrellisNode')
 
 # Main Trellis Client for WebSocket communication
-import json
-import aiohttp
-import os
-import base64
-import websockets
-import asyncio
-from PIL import Image
-import io
-import numpy as np
-import tempfile
-import logging
-
-# Setup logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-logger = logging.getLogger('TrellisNode')
-
-# Main Trellis Client for WebSocket communication
 class TrellisClientComfy:
-    def __init__(self, server_url, download_dir='trellis_downloads'):
+    def __init__(self, server_url, download_dir='trellis_downloads', output_subfolder='Otherrides_3d'):
         self.server_url = server_url
         self.websocket = None
         self.connected = False
+        
+        # Get path to ComfyUI outputs folder
+        self.comfy_dir = self._find_comfy_root()
+        self.outputs_dir = os.path.join(self.comfy_dir, 'output')
+        
+        # Create our specific subfolder within outputs
+        self.output_subfolder = output_subfolder
+        self.full_output_path = os.path.join(self.outputs_dir, self.output_subfolder)
+        os.makedirs(self.full_output_path, exist_ok=True)
+        
+        # Keep old download dir for compatibility
         self.download_dir = download_dir
         os.makedirs(self.download_dir, exist_ok=True)
+        
+        logger.info(f"ComfyUI outputs path: {self.outputs_dir}")
+        logger.info(f"3D models will be saved to: {self.full_output_path}")
+
+    def _find_comfy_root(self):
+        """Find the ComfyUI root directory by traversing up from current file"""
+        # Start with the directory containing this file
+        current_dir = os.path.dirname(os.path.abspath(__file__))
+        
+        # Go up to find ComfyUI root (max 3 levels)
+        for _ in range(3):
+            # Check if this might be the ComfyUI root
+            if os.path.isdir(os.path.join(current_dir, 'output')):
+                return current_dir
+            # Go up one level
+            parent_dir = os.path.dirname(current_dir)
+            if parent_dir == current_dir:  # Reached root of filesystem
+                break
+            current_dir = parent_dir
+        
+        # Fallback - assume this is a ComfyUI extension in the custom_nodes directory
+        return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
     async def connect(self):
         """Connect to WebSocket server"""
@@ -149,8 +165,17 @@ class TrellisClientComfy:
     async def download_file(self, session_id, task_id, file_type):
         """Download processed file (glb or video)"""
         try:
+            # File extension based on type
             file_extension = 'mp4' if file_type == 'video' else 'glb'
-            output_path = os.path.join(self.download_dir, f"{session_id}_output.{file_extension}")
+            
+            # Create unique filename based on session/task IDs
+            filename = f"{session_id}_output.{file_extension}"
+            
+            # Path for ComfyUI outputs folder (for preview3d compatibility)
+            output_path = os.path.join(self.full_output_path, filename)
+            
+            # Also save to original download dir for compatibility
+            legacy_output_path = os.path.join(self.download_dir, filename)
             
             logger.info(f"➜ Downloading {file_type} file...")
             offset = 0
@@ -183,13 +208,21 @@ class TrellisClientComfy:
                 chunks.append(chunk)
                 offset += len(chunk)
             
-            # Write all chunks to file
+            # Write all chunks to both file locations
             with open(output_path, 'wb') as f:
+                for chunk in chunks:
+                    f.write(chunk)
+                    
+            # Also write to legacy location for compatibility
+            with open(legacy_output_path, 'wb') as f:
                 for chunk in chunks:
                     f.write(chunk)
 
             logger.info(f"✓ Downloaded {file_type} file to {output_path}")
-            return output_path
+            
+            # For compatibility with preview3d, return the relative path from ComfyUI output folder
+            relative_path = os.path.join(self.output_subfolder, filename)
+            return relative_path
                 
         except Exception as e:
             logger.error(f"✗ Error downloading {file_type} file: {e}")
@@ -213,16 +246,19 @@ class TrellisProcessNode:
                 "slat_cfg_strength": ("FLOAT", {"default": 3.0, "min": 0.0, "max": 10.0, "step": 0.1}),
                 "simplify": ("FLOAT", {"default": 0.95, "min": 0.9, "max": 0.98, "step": 0.01}),
                 "texture_size": ("INT", {"default": 1024, "min": 512, "max": 2048, "step": 512}),
+            },
+            "optional": {
+                "custom_output_dir": ("STRING", {"default": "Otherrides_3d"})
             }
         }
     
     RETURN_TYPES = ("STRING", "STRING")
-    RETURN_NAMES = ("glb_path", "video_path")
+    RETURN_NAMES = ("model_path", "video_path")
     FUNCTION = "process"
     CATEGORY = "Trellis"
 
     async def _process_async(self, image, server_url, seed, sparse_steps, sparse_cfg_strength, 
-                           slat_steps, slat_cfg_strength, simplify, texture_size):
+                           slat_steps, slat_cfg_strength, simplify, texture_size, custom_output_dir=None):
         # Convert ComfyUI image format to bytes
         # Handle PyTorch tensor if present
         try:
@@ -265,9 +301,12 @@ class TrellisProcessNode:
                 # Round to nearest valid size
                 params['texture_size'] = min(valid_texture_sizes, key=lambda x: abs(x - params['texture_size']))
                 logger.warning(f"Adjusted texture_size to {params['texture_size']}")
+            
+            # Use custom output dir if provided
+            output_subfolder = custom_output_dir if custom_output_dir else "Otherrides_3d"
                 
             # Process image
-            client = TrellisClientComfy(server_url)
+            client = TrellisClientComfy(server_url, output_subfolder=output_subfolder)
             
             try:
                 result = await client.process_image(image_bytes, params)
@@ -277,13 +316,13 @@ class TrellisProcessNode:
                     return None, None
                     
                 # Download files
-                glb_path = await client.download_file(result['session_id'], result['task_id'], 'glb')
+                model_path = await client.download_file(result['session_id'], result['task_id'], 'glb')
                 video_path = await client.download_file(result['session_id'], result['task_id'], 'video')
                 
                 # Disconnect when done
                 await client.disconnect()
                 
-                return glb_path, video_path
+                return model_path, video_path
             
             except Exception as e:
                 logger.error(f"Error processing image: {e}")
@@ -296,17 +335,19 @@ class TrellisProcessNode:
             return None, None
 
     def process(self, image, server_url, seed, sparse_steps, sparse_cfg_strength, 
-                slat_steps, slat_cfg_strength, simplify, texture_size):
+                slat_steps, slat_cfg_strength, simplify, texture_size, custom_output_dir=None):
         # Create event loop and run async process
         loop = asyncio.new_event_loop()
         asyncio.set_event_loop(loop)
         try:
-            glb_path, video_path = loop.run_until_complete(
+            model_path, video_path = loop.run_until_complete(
                 self._process_async(image, server_url, seed, sparse_steps, sparse_cfg_strength, 
-                                  slat_steps, slat_cfg_strength, simplify, texture_size)
+                                  slat_steps, slat_cfg_strength, simplify, texture_size, custom_output_dir)
             )
-            logger.info(f"Downloaded GLB file to: {glb_path}")
-            return (glb_path or "", video_path or "")
+            logger.info(f"Downloaded model file to: {model_path}")
+            
+            # Return relative path for preview3d compatibility
+            return (model_path or "", video_path or "")
         finally:
             loop.close()
 

@@ -58,13 +58,19 @@ COMFY_DIR = BASE_DIR.parent.parent  # Points to ComfyUI root
 DOWNLOAD_DIR = BASE_DIR / "trellis_downloads"
 COMFY_DOWNLOAD_DIR = COMFY_DIR / "trellis_downloads"  # Points to ComfyUI/trellis_downloads
 WEB_DIRECTORY = BASE_DIR / "web"
+JS_DIRECTORY = BASE_DIR / "js"
 # Register web directory
 
 # Use both directories for media paths
 MEDIA_DIRS = [DOWNLOAD_DIR, COMFY_DOWNLOAD_DIR]
 
 WEB_DEPENDENCIES = [
-    "js/trellis-viewer.js"  # Only this JavaScript file
+    "js/trellis-viewer.js",
+    "js/otherrides-folder-browse.js",  # Only this JavaScript file
+    "js/otherrides-widgets.js"
+    "js/simple_file_picker.js"
+    # "js/trellis_file_picker.js"
+
 ]
 
 # Define all required directories
@@ -76,7 +82,8 @@ directories = [
     BASE_DIR / "trellis_files" / "models",
     BASE_DIR / "trellis_files" / "videos",
     BASE_DIR / "trellis_metadata",
-    BASE_DIR / "web"
+    BASE_DIR / "web",
+    BASE_DIR /  "js"
 ]
 
 # Create directories if they don't exist
@@ -91,10 +98,19 @@ MEDIA_PATHS = [str(path) for path in MEDIA_DIRS]
 NODE_CLASS_MAPPINGS = {}
 NODE_DISPLAY_NAME_MAPPINGS = {}
 
-# Dictionary of node modules to import
+# Add this to the node_modules dictionary in __init__.py
 node_modules = {
     'nodes.trellis_media_nodes': 'media and 3D viewer nodes',
-    'comfyui_trellis_node': 'basic Trellis WebSocket node'
+    'comfyui_trellis_node': 'basic Trellis WebSocket node',
+    'nodes.trellis_preview3d_node': '3D preview compatibility nodes',  # New entry
+    'trellis_advanced_nodes': 'Trellis Advanced nodes',
+    'nodes.otherrides_image_batch_loader':"Image Batch Load",
+    'nodes.trellis_file_server': 'file browser functionality',
+    'nodes.folder_browse_node': 'folder browser functionality',
+    'nodes.folder_browser': 'new folder browser functionality',
+    'nodes.otherrides_batch_widgets': 'bulk loader',
+    'nodes.simple_file_picker': 'just pick some files',
+    'nodes.trellis_file_picker': 'file picker'
 }
 
 # Import all node modules
